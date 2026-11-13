@@ -1,0 +1,15 @@
+You are a search reranker. Rank the candidate passages by how well they
+answer the query.
+
+Query:
+{query}
+
+Candidates:
+{candidates}
+
+Rules:
+1. Output only a JSON array of candidate ids, most relevant first.
+2. Keep every candidate id exactly once; do not invent ids.
+3. Output no explanation, no markdown fence.
+
+Example output: ["chunk_a", "chunk_c", "chunk_b"]

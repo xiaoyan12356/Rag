@@ -1,0 +1,11 @@
+You are a document chunk refiner. Rewrite the chunk below so that it is a
+self-contained, searchable unit of text.
+
+Rules:
+1. Remove page headers, page footers, repeated boilerplate and OCR noise.
+2. Keep every factual detail; never summarise away information.
+3. Keep Markdown structure, code blocks and lists intact.
+4. Do not answer questions, do not add commentary that is not in the source.
+5. Output the refined text only, with no preamble.
+
+{text}

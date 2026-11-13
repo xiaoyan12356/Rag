@@ -122,6 +122,35 @@ Agent 会自动引导你完成全部配置流程。
 
 > 💡 如果不熟悉 Skill 的使用方式，请观看配套笔记中的 **Setup Skill 使用讲解视频**。
 
+### 3. 本地开发环境（`clean-start` 分支）
+
+在 `clean-start` 分支上，代码由 Agent 基于 [DEV_SPEC.md](DEV_SPEC.md) 逐步生成。环境准备只需三步：
+
+```bash
+# 1. 创建虚拟环境（uv 会自动下载并选用 Python 3.12）
+uv venv .venv --python 3.12
+
+# 2. 安装项目与开发依赖（editable 安装，包名直接可用：core / libs / ingestion / mcp_server / observability）
+uv pip install -e ".[dev]"
+
+# 3. 运行入口与测试
+uv run python main.py
+uv run pytest -q
+```
+
+代码采用 `src/` 布局，顶层包通过 editable 安装暴露：
+
+```
+src/
+├── core/          # 核心层：数据类型、配置、查询引擎、响应构建、追踪
+├── libs/          # 可插拔层：LLM / Embedding / Splitter / VectorStore / Reranker / Evaluator
+├── ingestion/     # 摄取层：Pipeline、切分、增强、编码、存储
+├── mcp_server/    # MCP Server 层：协议处理与 Tools
+└── observability/ # 可观测层：结构化日志、Dashboard、评估
+```
+
+配置文件在 `config/settings.yaml`，Prompt 模板在 `config/prompts/`，运行时数据写入 `data/`、`cache/`、`logs/`（均不纳入版本管理）。
+
 ---
 
 ## 🎯 谁适合用这个项目 & 怎么用

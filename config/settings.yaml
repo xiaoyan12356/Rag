@@ -1,0 +1,19 @@
+# Modular RAG MCP Server - main configuration
+#
+# Every component is selected here: switching a provider/backend never requires
+# a code change. Credentials fall back to environment variables when api_key
+# is left empty (OPENAI_API_KEY, AZURE_API_KEY, ...).
+
+llm:
+  provider: openai          # azure | openai | ollama | deepseek
+  model: gpt-4o
+  api_key: ""
+
+embedding:
+  provider: openai          # openai | azure | ollama
+  model: text-embedding-ada-002
+  api_key: ""
+
+vector_store:
+  backend: chroma           # chroma | qdrant | pinecone
+  persist_path: ./data/db/chroma
