@@ -1,19 +1,114 @@
 # Modular RAG MCP Server - main configuration
 #
-# Every component is selected here: switching a provider/backend never requires
-# a code change. Credentials fall back to environment variables when api_key
-# is left empty (OPENAI_API_KEY, AZURE_API_KEY, ...).
+# Every component is selected here: switching a provider never requires a code
+# change. Leave `api_key` empty to fall back to the provider's environment
+# variable (OPENAI_API_KEY, AZURE_API_KEY, DASHSCOPE_API_KEY, ...).
 
+# =============================================================================
+# LLM Configuration
+# =============================================================================
 llm:
-  provider: openai          # azure | openai | ollama | deepseek
-  model: gpt-4o
+  provider: "openai"          # openai | azure | ollama | deepseek | qwen | gemini
+  model: "gpt-4o"
+  deployment_name: ""
+  azure_endpoint: ""
+  api_version: ""
   api_key: ""
+  base_url: ""
+  temperature: 0.0
+  max_tokens: 4096
 
+# =============================================================================
+# Embedding Configuration
+# =============================================================================
 embedding:
-  provider: openai          # openai | azure | ollama
-  model: text-embedding-ada-002
+  provider: "openai"          # openai | azure | ollama | qwen | gemini
+  model: "text-embedding-ada-002"
+  dimensions: 1536
+  azure_endpoint: ""
+  deployment_name: ""
+  api_version: ""
   api_key: ""
+  base_url: ""
 
+# =============================================================================
+# Vision LLM Configuration (for Image Captioning)
+# =============================================================================
+vision_llm:
+  enabled: false
+  provider: "openai"
+  model: "gpt-4o"
+  azure_endpoint: ""
+  deployment_name: ""
+  api_version: ""
+  api_key: ""
+  base_url: ""
+  max_image_size: 2048
+
+# =============================================================================
+# Vector Store Configuration
+# =============================================================================
 vector_store:
-  backend: chroma           # chroma | qdrant | pinecone
-  persist_path: ./data/db/chroma
+  provider: "chroma"          # chroma | qdrant | pinecone
+  persist_directory: "./data/db/chroma"
+  collection_name: "knowledge_hub"
+
+# =============================================================================
+# Retrieval Configuration
+# =============================================================================
+retrieval:
+  dense_top_k: 20
+  sparse_top_k: 20
+  fusion_top_k: 10
+  rrf_k: 60
+
+# =============================================================================
+# Rerank Configuration
+# =============================================================================
+rerank:
+  enabled: false
+  provider: "none"            # none | cross_encoder | llm
+  model: ""
+  top_k: 5
+
+# =============================================================================
+# Evaluation Configuration
+# =============================================================================
+evaluation:
+  enabled: false
+  provider: "custom"          # custom | ragas
+  metrics:
+    - "hit_rate"
+    - "mrr"
+
+# =============================================================================
+# Observability Configuration
+# =============================================================================
+observability:
+  log_level: "INFO"
+  trace_enabled: true
+  trace_file: "./logs/traces.jsonl"
+  structured_logging: true
+
+# =============================================================================
+# Ingestion Configuration
+# =============================================================================
+ingestion:
+  chunk_size: 1000
+  chunk_overlap: 200
+  splitter: "recursive"       # recursive | semantic | fixed_length
+  batch_size: 100
+  chunk_refiner:
+    use_llm: false
+  metadata_enricher:
+    use_llm: false
+
+# =============================================================================
+# Dashboard Configuration
+# =============================================================================
+dashboard:
+  enabled: true
+  port: 8501
+  traces_dir: "./logs"
+  auto_refresh: true
+  refresh_interval: 5
