@@ -62,3 +62,12 @@ class VectorStoreFactory:
                 "which is not a BaseVectorStore"
             )
         return store
+
+
+def _chroma_builder(settings: Settings) -> BaseVectorStore:
+    from libs.vector_store.chroma_store import ChromaStore
+
+    return ChromaStore(settings.vector_store)
+
+
+VectorStoreFactory.register("chroma", _chroma_builder)

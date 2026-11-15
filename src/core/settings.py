@@ -22,6 +22,21 @@ import yaml
 
 DEFAULT_SETTINGS_PATH = Path("config/settings.yaml")
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def resolve_path(relative: str | Path) -> Path:
+    """Resolve a repo-relative path to an absolute path.
+
+    An absolute path is returned unchanged; anything else is resolved against
+    the repository root so a config file can name a data directory without
+    depending on the working directory.
+    """
+    path = Path(relative)
+    if path.is_absolute():
+        return path
+    return (REPO_ROOT / path).resolve()
+
 # Provider -> environment variable holding the credential. An empty `api_key`
 # in the config file falls back to this variable.
 API_KEY_ENV_VARS = {

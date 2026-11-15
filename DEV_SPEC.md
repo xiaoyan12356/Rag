@@ -1970,7 +1970,7 @@ dashboard:
 | B7.3 | OpenAI & Azure Embedding 实现 | [x] | 2026-11-15 | OpenAIEmbedding/AzureEmbedding + HTTPEmbeddingProvider 批量与长度校验 + 23 个 mock HTTP 测试 |
 | B7.4 | Ollama Embedding 实现 | [x] | 2026-11-15 | OllamaEmbedding(/api/embeddings) + OllamaEmbeddingError + 工厂注册 + 14 个 mock HTTP 测试 |
 | B7.5 | Recursive Splitter 默认实现 | [x] | 2026-11-15 | RecursiveSplitter(Markdown 结构感知) + 工厂注册 recursive + 16 个单元测试 |
-| B7.6 | ChromaStore 默认实现 | [ ] | | |
+| B7.6 | ChromaStore 默认实现 | [x] | 2026-11-15 | ChromaStore(PersistentClient) + 工厂注册 chroma + 共享契约套件实跑 23 个集成测试 |
 | B7.7 | LLM Reranker 实现 | [ ] | | |
 | B7.8 | Cross-Encoder Reranker 实现 | [ ] | | |
 | B8 | Vision LLM 抽象接口与工厂集成 | [ ] | | |
@@ -2067,7 +2067,7 @@ dashboard:
 | 阶段 | 总任务数 | 已完成 | 进度 |
 |------|---------|--------|------|
 | 阶段 A | 3 | 3 | 100% |
-| 阶段 B | 16 | 11 | 69% |
+| 阶段 B | 16 | 12 | 75% |
 | 阶段 C | 15 | 0 | 0% |
 | 阶段 D | 7 | 0 | 0% |
 | 阶段 E | 6 | 0 | 0% |
@@ -2075,7 +2075,7 @@ dashboard:
 | 阶段 G | 6 | 0 | 0% |
 | 阶段 H | 5 | 0 | 0% |
 | 阶段 I | 5 | 0 | 0% |
-| **总计** | **68** | **14** | **21%** |
+| **总计** | **68** | **15** | **22%** |
 
 
 ---
@@ -2339,6 +2339,13 @@ dashboard:
   - 测试应覆盖：基本 upsert、向量查询、top_k 参数、metadata filters（如支持）。
   - 使用临时目录进行持久化测试，测试结束后清理。
 - **测试方法**：`pytest -q tests/integration/test_chroma_store_roundtrip.py`
+- **实现说明**：
+  - 契约检查（B4 写在 `tests/contract/vector_store_contract.py`）直接被真实 Chroma 后端继承跑，因此内存 Fake 与真实数据库按同一套期望验收，而不是两份相似测试。
+  - Chroma 返回的是距离（cosine distance）而不是相似度，store 在返回前换算成 `score = 1 - distance / 2`，让"分数越大越近"的语义在所有后端一致。
+  - `persist_directory` 通过 `resolve_path` 按仓库根目录解析，配置里写相对路径时不会受工作目录影响。
+  - Chroma 的 metadata 只接受标量与字符串，列表被拼成逗号分隔字符串；空 metadata 会写入占位键，因为 Chroma 拒绝空 metadata。
+  - 块文本放在 `metadata["text"]`，同时作为 Chroma 的 document 字段存储，`get_by_ids` 回来时文本不丢。
+  - 所有 Chroma 异常统一包成 `VectorStoreError`，带上集合名与操作，便于定位是持久化目录还是集合名的问题。
 
 ### B7.7：LLM Reranker（读取 rerank prompt）
 - **目标**：补齐 `llm_reranker.py`，读取 `config/prompts/rerank.txt` 构造 prompt（测试中可注入替代文本），并可在失败时返回可回退信号。
