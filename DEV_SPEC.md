@@ -1965,7 +1965,7 @@ dashboard:
 | B4 | VectorStore 抽象接口与工厂 | [x] | 2026-11-15 | BaseVectorStore 契约(upsert/query/get_by_ids) + VectorStoreError + VectorStoreFactory + 可复用契约测试套件 + 31 个测试 |
 | B5 | Reranker 抽象接口与工厂（含 None 回退） | [x] | 2026-11-15 | BaseReranker 抽象基类 + NoneReranker 顺序回退 + RerankerFactory 策略路由 + 25 个单元测试 |
 | B6 | Evaluator 抽象接口与工厂 | [x] | 2026-11-15 | BaseEvaluator 抽象基类 + NoneEvaluator 回退 + CustomEvaluator(hit_rate/mrr) + EvaluatorFactory + 30 个单元测试 |
-| B7.1 | OpenAI-Compatible LLM 实现 | [ ] | | |
+| B7.1 | OpenAI-Compatible LLM 实现 | [x] | 2026-11-15 | 共享 JSONHttpClient + OpenAILLM/AzureLLM/DeepSeekLLM + ChatResponse 契约 + 22 个 mock HTTP 测试 |
 | B7.2 | Ollama LLM 实现 | [ ] | | |
 | B7.3 | OpenAI & Azure Embedding 实现 | [ ] | | |
 | B7.4 | Ollama Embedding 实现 | [ ] | | |
@@ -2067,7 +2067,7 @@ dashboard:
 | 阶段 | 总任务数 | 已完成 | 进度 |
 |------|---------|--------|------|
 | 阶段 A | 3 | 3 | 100% |
-| 阶段 B | 16 | 6 | 38% |
+| 阶段 B | 16 | 7 | 44% |
 | 阶段 C | 15 | 0 | 0% |
 | 阶段 D | 7 | 0 | 0% |
 | 阶段 E | 6 | 0 | 0% |
@@ -2075,7 +2075,7 @@ dashboard:
 | 阶段 G | 6 | 0 | 0% |
 | 阶段 H | 5 | 0 | 0% |
 | 阶段 I | 5 | 0 | 0% |
-| **总计** | **68** | **9** | **13%** |
+| **总计** | **68** | **10** | **15%** |
 
 
 ---
@@ -2251,6 +2251,12 @@ dashboard:
   - 配置不同 `provider` 时工厂路由正确。
   - `chat(messages)` 对输入 shape 校验清晰，异常信息可读（包含 provider 与错误类型）。
 - **测试方法**：`pytest -q tests/unit/test_llm_providers_smoke.py`。
+- **实现说明**：
+  - OpenAI / Azure / DeepSeek 的 chat completions 线格式一致，差异只在 URL 与鉴权头，所以 `OpenAILLM` 负责请求体与响应解析，`AzureLLM`（deployment 路径 + `api-key` 头）、`DeepSeekLLM`（换 base_url）各覆写两个方法。
+  - 传输层统一放在 `libs/http_client.py` 的 `JSONHttpClient`：超时、连接失败、HTTP 错误码各自翻译成带 provider 名与失败类型的可读错误，错误信息只写 provider 与错误码/描述，不回显 api_key 或 endpoint。
+  - `httpx` 的 `transport` 可注入，测试用 `httpx.MockTransport` 走真实请求构造与错误处理，不联网。
+  - `BaseLLM` 本次扩展：`chat(messages, trace=None)` 增加 trace 形参；新增 `ChatResponse`（content/model/usage）与 `complete()`，需要 token 用量的调用方不必自己再解析一次；`validate_messages()` 集中校验 role 与 content。
+  - Azure 在构造时即校验 `azure_endpoint` 与 `deployment_name`，缺配置直接报错而不是等到第一次请求。
 
 ### B7.2：Ollama LLM（本地后端）
 - **目标**：补齐 `ollama_llm.py`，支持本地 HTTP endpoint（默认 `base_url` + `model`），并可被 mock 测试。

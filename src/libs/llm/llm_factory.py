@@ -61,3 +61,26 @@ class LLMFactory:
                 "which is not a BaseLLM"
             )
         return llm
+
+
+def _openai_builder(settings: Settings) -> BaseLLM:
+    from libs.llm.openai_llm import OpenAILLM
+
+    return OpenAILLM(settings.llm)
+
+
+def _azure_builder(settings: Settings) -> BaseLLM:
+    from libs.llm.azure_llm import AzureLLM
+
+    return AzureLLM(settings.llm)
+
+
+def _deepseek_builder(settings: Settings) -> BaseLLM:
+    from libs.llm.deepseek_llm import DeepSeekLLM
+
+    return DeepSeekLLM(settings.llm)
+
+
+LLMFactory.register("openai", _openai_builder)
+LLMFactory.register("azure", _azure_builder)
+LLMFactory.register("deepseek", _deepseek_builder)

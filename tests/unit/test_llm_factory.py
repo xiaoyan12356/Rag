@@ -18,7 +18,7 @@ class FakeLLM(BaseLLM):
         super().__init__(config)
         self.calls: list[list[ChatMessage]] = []
 
-    def chat(self, messages: Sequence[ChatMessage]) -> str:
+    def chat(self, messages: Sequence[ChatMessage], trace=None) -> str:
         self.calls.append(list(messages))
         return "fake reply"
 
