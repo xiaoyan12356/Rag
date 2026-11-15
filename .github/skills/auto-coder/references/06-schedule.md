@@ -56,7 +56,7 @@
 | B5 | Reranker 抽象接口与工厂（含 None 回退） | [x] | 2026-11-15 | BaseReranker 抽象基类 + NoneReranker 顺序回退 + RerankerFactory 策略路由 + 25 个单元测试 |
 | B6 | Evaluator 抽象接口与工厂 | [x] | 2026-11-15 | BaseEvaluator 抽象基类 + NoneEvaluator 回退 + CustomEvaluator(hit_rate/mrr) + EvaluatorFactory + 30 个单元测试 |
 | B7.1 | OpenAI-Compatible LLM 实现 | [x] | 2026-11-15 | 共享 JSONHttpClient + OpenAILLM/AzureLLM/DeepSeekLLM + ChatResponse 契约 + 22 个 mock HTTP 测试 |
-| B7.2 | Ollama LLM 实现 | [ ] | | |
+| B7.2 | Ollama LLM 实现 | [x] | 2026-11-15 | OllamaLLM(/api/chat) + OllamaLLMError + 工厂注册 + 12 个 mock HTTP 测试 |
 | B7.3 | OpenAI & Azure Embedding 实现 | [ ] | | |
 | B7.4 | Ollama Embedding 实现 | [ ] | | |
 | B7.5 | Recursive Splitter 默认实现 | [ ] | | |
@@ -157,7 +157,7 @@
 | 阶段 | 总任务数 | 已完成 | 进度 |
 |------|---------|--------|------|
 | 阶段 A | 3 | 3 | 100% |
-| 阶段 B | 16 | 7 | 44% |
+| 阶段 B | 16 | 8 | 50% |
 | 阶段 C | 15 | 0 | 0% |
 | 阶段 D | 7 | 0 | 0% |
 | 阶段 E | 6 | 0 | 0% |
@@ -165,7 +165,7 @@
 | 阶段 G | 6 | 0 | 0% |
 | 阶段 H | 5 | 0 | 0% |
 | 阶段 I | 5 | 0 | 0% |
-| **总计** | **68** | **10** | **15%** |
+| **总计** | **68** | **11** | **16%** |
 
 
 ---
@@ -357,6 +357,11 @@
   - provider=ollama 时可由 `LLMFactory` 创建。
   - 在连接失败/超时等场景下，抛出可读错误且不泄露敏感配置。
 - **测试方法**：`pytest -q tests/unit/test_ollama_llm.py`。
+- **实现说明**：
+  - Ollama 用自己的 `/api/chat` 线格式（`message.content`、`prompt_eval_count`/`eval_count`），不假装兼容 OpenAI，因此单独一个 provider 而不是复用 `OpenAILLM`。
+  - 默认 endpoint `http://localhost:11434`、默认超时 120s（本地模型首 token 比远端慢），可用 `llm.base_url` 覆盖。
+  - 请求固定 `stream=false` 拿一次完整回答，`temperature`/`max_tokens` 映射到 Ollama 的 `options.temperature`/`options.num_predict`。
+  - 错误信息只写 provider 名与失败类型，不回显 api_key，也不回显 endpoint 地址（测试对此有断言）。
 
 ### B7.3：OpenAI & Azure Embedding 实现
 - **目标**：补齐 `openai_embedding.py` 和 `azure_embedding.py`，支持 OpenAI 官方 API 和 Azure OpenAI 服务的 Embedding 调用，支持批量 `embed(texts)`，并可被 mock 测试。

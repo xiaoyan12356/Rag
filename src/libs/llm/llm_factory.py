@@ -81,6 +81,13 @@ def _deepseek_builder(settings: Settings) -> BaseLLM:
     return DeepSeekLLM(settings.llm)
 
 
+def _ollama_builder(settings: Settings) -> BaseLLM:
+    from libs.llm.ollama_llm import OllamaLLM
+
+    return OllamaLLM(settings.llm)
+
+
 LLMFactory.register("openai", _openai_builder)
 LLMFactory.register("azure", _azure_builder)
 LLMFactory.register("deepseek", _deepseek_builder)
+LLMFactory.register("ollama", _ollama_builder)
