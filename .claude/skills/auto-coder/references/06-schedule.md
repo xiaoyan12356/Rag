@@ -59,7 +59,7 @@
 | B7.2 | Ollama LLM 实现 | [x] | 2026-11-15 | OllamaLLM(/api/chat) + OllamaLLMError + 工厂注册 + 12 个 mock HTTP 测试 |
 | B7.3 | OpenAI & Azure Embedding 实现 | [x] | 2026-11-15 | OpenAIEmbedding/AzureEmbedding + HTTPEmbeddingProvider 批量与长度校验 + 23 个 mock HTTP 测试 |
 | B7.4 | Ollama Embedding 实现 | [x] | 2026-11-15 | OllamaEmbedding(/api/embeddings) + OllamaEmbeddingError + 工厂注册 + 14 个 mock HTTP 测试 |
-| B7.5 | Recursive Splitter 默认实现 | [ ] | | |
+| B7.5 | Recursive Splitter 默认实现 | [x] | 2026-11-15 | RecursiveSplitter(Markdown 结构感知) + 工厂注册 recursive + 16 个单元测试 |
 | B7.6 | ChromaStore 默认实现 | [ ] | | |
 | B7.7 | LLM Reranker 实现 | [ ] | | |
 | B7.8 | Cross-Encoder Reranker 实现 | [ ] | | |
@@ -157,7 +157,7 @@
 | 阶段 | 总任务数 | 已完成 | 进度 |
 |------|---------|--------|------|
 | 阶段 A | 3 | 3 | 100% |
-| 阶段 B | 16 | 10 | 63% |
+| 阶段 B | 16 | 11 | 69% |
 | 阶段 C | 15 | 0 | 0% |
 | 阶段 D | 7 | 0 | 0% |
 | 阶段 E | 6 | 0 | 0% |
@@ -165,7 +165,7 @@
 | 阶段 G | 6 | 0 | 0% |
 | 阶段 H | 5 | 0 | 0% |
 | 阶段 I | 5 | 0 | 0% |
-| **总计** | **68** | **13** | **19%** |
+| **总计** | **68** | **14** | **21%** |
 
 
 ---
@@ -411,6 +411,12 @@
   - provider=recursive 时 `SplitterFactory` 可创建。
   - `split_text` 能正确处理 Markdown 结构（标题/代码块不被打断）。
 - **测试方法**：`pytest -q tests/unit/test_recursive_splitter_lib.py`。
+- **实现说明**：
+  - LangChain 的 `RecursiveCharacterTextSplitter` 只负责字符级切分，Markdown 感知由本模块补上：先用正则把围栏代码块整段摘出来，再把散文部分交给递归切分器。
+  - 代码块是原子单位，即使超出 `chunk_size` 也不切开——切开的代码块会丢掉本该保留的代码。
+  - 切分后合并"末尾是标题"的块，避免标题与其引出的正文被拆到两个 chunk 里。
+  - `chunk_size`/`chunk_overlap` 在构造时校验：非正数、非负约束不满足、overlap ≥ size 直接报 `SplitterError`，避免 LangChain 内部产生静默截断。
+  - 空/纯空白文本返回空列表；非字符串输入报 `SplitterError` 而不是在库内部炸掉。
 
 ### B7.6：ChromaStore（VectorStore 默认后端）
 - **目标**：补齐 `chroma_store.py`，支持最小 `upsert(records)` 与 `query(vector, top_k, filters)`，并支持本地持久化目录（例如 `data/db/chroma/`）。

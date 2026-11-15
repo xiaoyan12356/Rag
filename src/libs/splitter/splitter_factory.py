@@ -61,3 +61,12 @@ class SplitterFactory:
                 "which is not a BaseSplitter"
             )
         return splitter
+
+
+def _recursive_builder(settings: Settings) -> BaseSplitter:
+    from libs.splitter.recursive_splitter import RecursiveSplitter
+
+    return RecursiveSplitter(settings.ingestion)
+
+
+SplitterFactory.register("recursive", _recursive_builder)
