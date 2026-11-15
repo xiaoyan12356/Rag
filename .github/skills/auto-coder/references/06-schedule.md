@@ -52,7 +52,7 @@
 | B1 | LLM 抽象接口与工厂 | [x] | 2026-11-13 | BaseLLM 抽象基类 + ChatMessage 契约 + LLMFactory 注册表路由 + 14 个单元测试 |
 | B2 | Embedding 抽象接口与工厂 | [x] | 2026-11-15 | BaseEmbedding 抽象基类 + EmbeddingError + EmbeddingFactory 注册表路由 + 19 个单元测试 |
 | B3 | Splitter 抽象接口与工厂 | [x] | 2026-11-15 | BaseSplitter 抽象基类 + SplitterError + SplitterFactory 策略注册表路由 + 16 个单元测试 |
-| B4 | VectorStore 抽象接口与工厂 | [ ] | | |
+| B4 | VectorStore 抽象接口与工厂 | [x] | 2026-11-15 | BaseVectorStore 契约(upsert/query/get_by_ids) + VectorStoreError + VectorStoreFactory + 可复用契约测试套件 + 31 个测试 |
 | B5 | Reranker 抽象接口与工厂（含 None 回退） | [ ] | | |
 | B6 | Evaluator 抽象接口与工厂 | [ ] | | |
 | B7.1 | OpenAI-Compatible LLM 实现 | [ ] | | |
@@ -157,7 +157,7 @@
 | 阶段 | 总任务数 | 已完成 | 进度 |
 |------|---------|--------|------|
 | 阶段 A | 3 | 3 | 100% |
-| 阶段 B | 16 | 3 | 19% |
+| 阶段 B | 16 | 4 | 25% |
 | 阶段 C | 15 | 0 | 0% |
 | 阶段 D | 7 | 0 | 0% |
 | 阶段 E | 6 | 0 | 0% |
@@ -165,7 +165,7 @@
 | 阶段 G | 6 | 0 | 0% |
 | 阶段 H | 5 | 0 | 0% |
 | 阶段 I | 5 | 0 | 0% |
-| **总计** | **68** | **6** | **9%** |
+| **总计** | **68** | **7** | **10%** |
 
 
 ---
@@ -285,6 +285,12 @@
   - `BaseVectorStore.query(vector, top_k, filters, trace: TraceContext | None = None)`
 - **验收标准**：契约测试（contract test）约束输入输出 shape。
 - **测试方法**：`pytest -q tests/unit/test_vector_store_contract.py`。
+- **实现说明**：
+  - 契约形状固定为三条：`upsert(records)` 收 `id`/`vector`/`metadata`（正文放 `metadata["text"]`，同 id 重复写入必须替换而不是追加）；`query(vector, top_k, filters)` 返回 `id`/`score`/`metadata`，按相似度从高到低，`filters` 按 metadata 等值过滤；`get_by_ids(ids)` 返回 `id`/`text`/`metadata`，查不到的 id 直接略过。
+  - `validate_records()` / `validate_query_vector()` 把输入 shape 校验集中放在基类，各后端复用，空记录、空向量、非法 `top_k` 一律给出可读 `ValueError`。
+  - 契约测试套件抽到 `tests/contract/vector_store_contract.py`，以 `VectorStoreContract` 基类形式供任意后端继承复用；本任务先用内存 Fake 跑通，B7.6 的 ChromaStore 直接继承同一套检查。
+  - `conftest.py` 增加 `tests/contract` 到 `sys.path`，使共享套件可以按模块名导入。
+  - 工厂初始不带默认 provider，`chroma` 的注册与实现随 B7.6 一起加入。
 
 ### B5：Reranker 抽象接口与工厂（含 None 回退）
 - **目标**：实现 `BaseReranker`、`RerankerFactory`，提供 `NoneReranker` 作为默认回退。
