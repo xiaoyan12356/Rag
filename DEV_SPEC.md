@@ -1960,7 +1960,7 @@ dashboard:
 | 任务编号 | 任务名称 | 状态 | 完成日期 | 备注 |
 |---------|---------|------|---------|------|
 | B1 | LLM 抽象接口与工厂 | [x] | 2026-11-13 | BaseLLM 抽象基类 + ChatMessage 契约 + LLMFactory 注册表路由 + 14 个单元测试 |
-| B2 | Embedding 抽象接口与工厂 | [ ] | | |
+| B2 | Embedding 抽象接口与工厂 | [x] | 2026-11-15 | BaseEmbedding 抽象基类 + EmbeddingError + EmbeddingFactory 注册表路由 + 19 个单元测试 |
 | B3 | Splitter 抽象接口与工厂 | [ ] | | |
 | B4 | VectorStore 抽象接口与工厂 | [ ] | | |
 | B5 | Reranker 抽象接口与工厂（含 None 回退） | [ ] | | |
@@ -2067,7 +2067,7 @@ dashboard:
 | 阶段 | 总任务数 | 已完成 | 进度 |
 |------|---------|--------|------|
 | 阶段 A | 3 | 3 | 100% |
-| 阶段 B | 16 | 1 | 6% |
+| 阶段 B | 16 | 2 | 13% |
 | 阶段 C | 15 | 0 | 0% |
 | 阶段 D | 7 | 0 | 0% |
 | 阶段 E | 6 | 0 | 0% |
@@ -2075,7 +2075,7 @@ dashboard:
 | 阶段 G | 6 | 0 | 0% |
 | 阶段 H | 5 | 0 | 0% |
 | 阶段 I | 5 | 0 | 0% |
-| **总计** | **68** | **4** | **6%** |
+| **总计** | **68** | **5** | **7%** |
 
 
 ---
@@ -2162,6 +2162,10 @@ dashboard:
   - `EmbeddingFactory.create(settings) -> BaseEmbedding`
 - **验收标准**：Fake embedding 返回稳定向量，工厂按 provider 分流。
 - **测试方法**：`pytest -q tests/unit/test_embedding_factory.py`。
+- **实现说明**：
+  - `embed(texts, trace=None)` 一次接收整批文本并按输入顺序返回等长向量列表；`validate_texts()` 对空批次、非字符串元素给出可读错误。
+  - `TraceContext` 在 `TYPE_CHECKING` 下导入：`core/trace/trace_context.py` 随 C5 才落地，借助 `from __future__ import annotations` 保证运行时不会触发该导入，签名先按契约固定下来。
+  - `EmbeddingFactory` 初始不带默认 provider，注册由 B7.3/B7.4 的具体实现完成；provider 名统一 `strip().lower()` 归一化，未知/缺失 provider 一律抛 `EmbeddingError`。
 
 ### B3：Splitter 抽象接口与工厂
 - **目标**：定义 `BaseSplitter` 与 `SplitterFactory`，支持不同切分策略（Recursive/Semantic/Fixed）。
