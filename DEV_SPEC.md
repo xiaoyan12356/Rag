@@ -1961,7 +1961,7 @@ dashboard:
 |---------|---------|------|---------|------|
 | B1 | LLM 抽象接口与工厂 | [x] | 2026-11-13 | BaseLLM 抽象基类 + ChatMessage 契约 + LLMFactory 注册表路由 + 14 个单元测试 |
 | B2 | Embedding 抽象接口与工厂 | [x] | 2026-11-15 | BaseEmbedding 抽象基类 + EmbeddingError + EmbeddingFactory 注册表路由 + 19 个单元测试 |
-| B3 | Splitter 抽象接口与工厂 | [ ] | | |
+| B3 | Splitter 抽象接口与工厂 | [x] | 2026-11-15 | BaseSplitter 抽象基类 + SplitterError + SplitterFactory 策略注册表路由 + 16 个单元测试 |
 | B4 | VectorStore 抽象接口与工厂 | [ ] | | |
 | B5 | Reranker 抽象接口与工厂（含 None 回退） | [ ] | | |
 | B6 | Evaluator 抽象接口与工厂 | [ ] | | |
@@ -2067,7 +2067,7 @@ dashboard:
 | 阶段 | 总任务数 | 已完成 | 进度 |
 |------|---------|--------|------|
 | 阶段 A | 3 | 3 | 100% |
-| 阶段 B | 16 | 2 | 13% |
+| 阶段 B | 16 | 3 | 19% |
 | 阶段 C | 15 | 0 | 0% |
 | 阶段 D | 7 | 0 | 0% |
 | 阶段 E | 6 | 0 | 0% |
@@ -2075,7 +2075,7 @@ dashboard:
 | 阶段 G | 6 | 0 | 0% |
 | 阶段 H | 5 | 0 | 0% |
 | 阶段 I | 5 | 0 | 0% |
-| **总计** | **68** | **5** | **7%** |
+| **总计** | **68** | **6** | **9%** |
 
 
 ---
@@ -2178,6 +2178,11 @@ dashboard:
   - `SplitterFactory.create(settings) -> BaseSplitter`
 - **验收标准**：Factory 能根据配置返回不同类型的 Splitter 实例（测试中可用 Fake 实现）。
 - **测试方法**：`pytest -q tests/unit/test_splitter_factory.py`。
+- **实现说明**：
+  - 策略名取自 `settings.ingestion.splitter`（与 B1/B2 一样由 `config/settings.yaml` 决定），工厂统一 `strip().lower()` 归一化，未知/缺失策略名一律抛 `SplitterError`。
+  - `split_text(text, trace=None)` 只返回按阅读顺序排列的片段列表，chunk 之间的 overlap 由具体策略实现负责，抽象层不做约束。
+  - `TraceContext` 与 B2 相同，在 `TYPE_CHECKING` 下导入，`core/trace/trace_context.py` 随 C5 落地。
+  - 工厂初始不带默认策略，`recursive` 的注册与实现随 B7.5 一起加入。
 
 ### B4：VectorStore 抽象接口与工厂（先定义契约）
 - **目标**：定义 `BaseVectorStore` 与 `VectorStoreFactory`，先不接真实 DB。
