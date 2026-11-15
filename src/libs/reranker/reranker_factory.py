@@ -68,3 +68,13 @@ class RerankerFactory:
                 "which is not a BaseReranker"
             )
         return reranker
+
+
+def _llm_builder(settings: Settings) -> BaseReranker:
+    from libs.llm.llm_factory import LLMFactory
+    from libs.reranker.llm_reranker import LLMReranker
+
+    return LLMReranker(settings.rerank, LLMFactory.create(settings))
+
+
+RerankerFactory.register("llm", _llm_builder)

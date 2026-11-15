@@ -61,7 +61,7 @@
 | B7.4 | Ollama Embedding 实现 | [x] | 2026-11-15 | OllamaEmbedding(/api/embeddings) + OllamaEmbeddingError + 工厂注册 + 14 个 mock HTTP 测试 |
 | B7.5 | Recursive Splitter 默认实现 | [x] | 2026-11-15 | RecursiveSplitter(Markdown 结构感知) + 工厂注册 recursive + 16 个单元测试 |
 | B7.6 | ChromaStore 默认实现 | [x] | 2026-11-15 | ChromaStore(PersistentClient) + 工厂注册 chroma + 共享契约套件实跑 23 个集成测试 |
-| B7.7 | LLM Reranker 实现 | [ ] | | |
+| B7.7 | LLM Reranker 实现 | [x] | 2026-11-15 | LLMReranker(读 config/prompts/rerank.txt) + 严格 JSON schema 校验 + 失败回退 + 23 个单元测试 |
 | B7.8 | Cross-Encoder Reranker 实现 | [ ] | | |
 | B8 | Vision LLM 抽象接口与工厂集成 | [ ] | | |
 | B9 | Azure Vision LLM 实现 | [ ] | | |
@@ -157,7 +157,7 @@
 | 阶段 | 总任务数 | 已完成 | 进度 |
 |------|---------|--------|------|
 | 阶段 A | 3 | 3 | 100% |
-| 阶段 B | 16 | 12 | 75% |
+| 阶段 B | 16 | 13 | 81% |
 | 阶段 C | 15 | 0 | 0% |
 | 阶段 D | 7 | 0 | 0% |
 | 阶段 E | 6 | 0 | 0% |
@@ -165,7 +165,7 @@
 | 阶段 G | 6 | 0 | 0% |
 | 阶段 H | 5 | 0 | 0% |
 | 阶段 I | 5 | 0 | 0% |
-| **总计** | **68** | **15** | **22%** |
+| **总计** | **68** | **16** | **24%** |
 
 
 ---
@@ -446,6 +446,13 @@
   - backend=llm 时 `RerankerFactory` 可创建。
   - 输出严格结构化（例如 ranked ids），不满足 schema 时抛出可读错误。
 - **测试方法**：`pytest -q tests/unit/test_llm_reranker.py`。
+- **实现说明**：
+  - 指令放在 `config/prompts/rerank.txt`（含 `{query}`/`{candidates}` 占位符），改排序策略不用改代码；测试可注入 `prompt_template` 覆盖。
+  - 模型被要求只回一个 JSON id 数组，回答必须恰好覆盖全部候选 id 各一次：出现未知 id、重复 id、漏掉 id 一律报 `RerankerError`，不做"半应用"，避免排序结果与候选集对不上。
+  - 兼容模型偶尔加的 markdown 围栏（```json ... ```），解析前剥掉。
+  - LLM 调用失败（`LLMError`）时保留检索器给出的顺序并置 `fallback_used=True`；回答格式非法时同样标记 fallback 后抛出可读错误。
+  - 只有一个候选时不发请求——没有排序空间，也省一次 API 调用。
+  - 候选文本优先取 `text` 字段，其次取 `metadata["text"]`，兼容检索结果与存储记录两种形状。
 
 ### B7.8：Cross-Encoder Reranker（本地/托管模型，占位可跑）
 - **目标**：补齐 `cross_encoder_reranker.py`，支持对 Top-M candidates 打分排序；测试中用 mock scorer 保证 deterministic。
