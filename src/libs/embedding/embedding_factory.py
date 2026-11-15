@@ -75,5 +75,12 @@ def _azure_builder(settings: Settings) -> BaseEmbedding:
     return AzureEmbedding(settings.embedding)
 
 
+def _ollama_builder(settings: Settings) -> BaseEmbedding:
+    from libs.embedding.ollama_embedding import OllamaEmbedding
+
+    return OllamaEmbedding(settings.embedding)
+
+
 EmbeddingFactory.register("openai", _openai_builder)
 EmbeddingFactory.register("azure", _azure_builder)
+EmbeddingFactory.register("ollama", _ollama_builder)

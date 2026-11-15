@@ -1968,7 +1968,7 @@ dashboard:
 | B7.1 | OpenAI-Compatible LLM 实现 | [x] | 2026-11-15 | 共享 JSONHttpClient + OpenAILLM/AzureLLM/DeepSeekLLM + ChatResponse 契约 + 22 个 mock HTTP 测试 |
 | B7.2 | Ollama LLM 实现 | [x] | 2026-11-15 | OllamaLLM(/api/chat) + OllamaLLMError + 工厂注册 + 12 个 mock HTTP 测试 |
 | B7.3 | OpenAI & Azure Embedding 实现 | [x] | 2026-11-15 | OpenAIEmbedding/AzureEmbedding + HTTPEmbeddingProvider 批量与长度校验 + 23 个 mock HTTP 测试 |
-| B7.4 | Ollama Embedding 实现 | [ ] | | |
+| B7.4 | Ollama Embedding 实现 | [x] | 2026-11-15 | OllamaEmbedding(/api/embeddings) + OllamaEmbeddingError + 工厂注册 + 14 个 mock HTTP 测试 |
 | B7.5 | Recursive Splitter 默认实现 | [ ] | | |
 | B7.6 | ChromaStore 默认实现 | [ ] | | |
 | B7.7 | LLM Reranker 实现 | [ ] | | |
@@ -2067,7 +2067,7 @@ dashboard:
 | 阶段 | 总任务数 | 已完成 | 进度 |
 |------|---------|--------|------|
 | 阶段 A | 3 | 3 | 100% |
-| 阶段 B | 16 | 9 | 56% |
+| 阶段 B | 16 | 10 | 63% |
 | 阶段 C | 15 | 0 | 0% |
 | 阶段 D | 7 | 0 | 0% |
 | 阶段 E | 6 | 0 | 0% |
@@ -2075,7 +2075,7 @@ dashboard:
 | 阶段 G | 6 | 0 | 0% |
 | 阶段 H | 5 | 0 | 0% |
 | 阶段 I | 5 | 0 | 0% |
-| **总计** | **68** | **12** | **18%** |
+| **总计** | **68** | **13** | **19%** |
 
 
 ---
@@ -2305,6 +2305,12 @@ dashboard:
   - 空输入、超长输入有明确行为（报错或截断策略）。
   - mock 测试覆盖正常响应、连接失败、超时等场景。
 - **测试方法**：`pytest -q tests/unit/test_ollama_embedding.py`。
+- **实现说明**：
+  - Ollama 的 `/api/embeddings` 一次只服务一条文本，没有批量入参，因此批量调用被展开成"每条文本一个请求"，顺序与输入保持一致。
+  - 向量宽度由模型决定（`nomic-embed-text` 768 维、`mxbai-embed-large` 1024 维），不是配置项，所以实现里不校验维度，只校验响应确实是数字向量。
+  - 默认地址 `http://localhost:11434`，可通过 `embedding.base_url` 覆盖；Ollama 本地部署不校验 api_key。
+  - 空批次、空白文本、超长文本（>32000 字符）在发请求前就报 `EmbeddingError`，不浪费本地推理资源。
+  - 连接失败、超时、404（模型不存在）分别给出可读提示，消息里不出现 api_key 与服务地址。
 
 ### B7.5：Recursive Splitter 默认实现
 - **目标**：补齐 `recursive_splitter.py`，封装 LangChain 的切分逻辑，作为默认切分器。
