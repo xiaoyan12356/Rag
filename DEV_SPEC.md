@@ -1963,7 +1963,7 @@ dashboard:
 | B2 | Embedding 抽象接口与工厂 | [x] | 2026-11-15 | BaseEmbedding 抽象基类 + EmbeddingError + EmbeddingFactory 注册表路由 + 19 个单元测试 |
 | B3 | Splitter 抽象接口与工厂 | [x] | 2026-11-15 | BaseSplitter 抽象基类 + SplitterError + SplitterFactory 策略注册表路由 + 16 个单元测试 |
 | B4 | VectorStore 抽象接口与工厂 | [x] | 2026-11-15 | BaseVectorStore 契约(upsert/query/get_by_ids) + VectorStoreError + VectorStoreFactory + 可复用契约测试套件 + 31 个测试 |
-| B5 | Reranker 抽象接口与工厂（含 None 回退） | [ ] | | |
+| B5 | Reranker 抽象接口与工厂（含 None 回退） | [x] | 2026-11-15 | BaseReranker 抽象基类 + NoneReranker 顺序回退 + RerankerFactory 策略路由 + 25 个单元测试 |
 | B6 | Evaluator 抽象接口与工厂 | [ ] | | |
 | B7.1 | OpenAI-Compatible LLM 实现 | [ ] | | |
 | B7.2 | Ollama LLM 实现 | [ ] | | |
@@ -2067,7 +2067,7 @@ dashboard:
 | 阶段 | 总任务数 | 已完成 | 进度 |
 |------|---------|--------|------|
 | 阶段 A | 3 | 3 | 100% |
-| 阶段 B | 16 | 4 | 25% |
+| 阶段 B | 16 | 5 | 31% |
 | 阶段 C | 15 | 0 | 0% |
 | 阶段 D | 7 | 0 | 0% |
 | 阶段 E | 6 | 0 | 0% |
@@ -2075,7 +2075,7 @@ dashboard:
 | 阶段 G | 6 | 0 | 0% |
 | 阶段 H | 5 | 0 | 0% |
 | 阶段 I | 5 | 0 | 0% |
-| **总计** | **68** | **7** | **10%** |
+| **总计** | **68** | **8** | **12%** |
 
 
 ---
@@ -2213,6 +2213,12 @@ dashboard:
   - `NoneReranker`（保持原顺序）
 - **验收标准**：backend=none 时不会改变排序；未知 backend 明确报错。
 - **测试方法**：`pytest -q tests/unit/test_reranker_factory.py`。
+- **实现说明**：
+  - `NoneReranker` 与 `BaseReranker` 同放在 `base_reranker.py`：它是内置回退而非某个 provider 的实现，注册表为空时也能用。
+  - `rerank(query, candidates)` 只改变顺序、不改候选记录本身；返回的是新列表，调用方拿到的顺序不会反过来污染检索结果。
+  - 工厂的判定顺序：provider 缺失 → `RerankerError`；provider=`none` → 直接给 `NoneReranker`；provider 未注册 → `RerankerError`（即使 `rerank.enabled=false` 也要报错，未知后端属于配置错误不能被静默吞掉）；已注册但 `rerank.enabled=false` → 回退到 `NoneReranker`。
+  - 基类提供 `fallback_used` 标志与 `validate_query`/`validate_candidates` 校验，供 B7.7/B7.8 的真实后端在失败时上报"已回退"。
+  - 工厂初始不带默认策略，`llm`/`cross_encoder` 的注册与实现随 B7.7/B7.8 一起加入。
 
 ### B6：Evaluator 抽象接口与工厂（先做自定义轻量指标）
 - **目标**：定义 `BaseEvaluator`、`EvaluatorFactory`，实现最小 `CustomEvaluator`（例如 hit_rate/mrr）。
