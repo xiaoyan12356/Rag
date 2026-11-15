@@ -54,7 +54,7 @@
 | B3 | Splitter 抽象接口与工厂 | [x] | 2026-11-15 | BaseSplitter 抽象基类 + SplitterError + SplitterFactory 策略注册表路由 + 16 个单元测试 |
 | B4 | VectorStore 抽象接口与工厂 | [x] | 2026-11-15 | BaseVectorStore 契约(upsert/query/get_by_ids) + VectorStoreError + VectorStoreFactory + 可复用契约测试套件 + 31 个测试 |
 | B5 | Reranker 抽象接口与工厂（含 None 回退） | [x] | 2026-11-15 | BaseReranker 抽象基类 + NoneReranker 顺序回退 + RerankerFactory 策略路由 + 25 个单元测试 |
-| B6 | Evaluator 抽象接口与工厂 | [ ] | | |
+| B6 | Evaluator 抽象接口与工厂 | [x] | 2026-11-15 | BaseEvaluator 抽象基类 + NoneEvaluator 回退 + CustomEvaluator(hit_rate/mrr) + EvaluatorFactory + 30 个单元测试 |
 | B7.1 | OpenAI-Compatible LLM 实现 | [ ] | | |
 | B7.2 | Ollama LLM 实现 | [ ] | | |
 | B7.3 | OpenAI & Azure Embedding 实现 | [ ] | | |
@@ -157,7 +157,7 @@
 | 阶段 | 总任务数 | 已完成 | 进度 |
 |------|---------|--------|------|
 | 阶段 A | 3 | 3 | 100% |
-| 阶段 B | 16 | 5 | 31% |
+| 阶段 B | 16 | 6 | 38% |
 | 阶段 C | 15 | 0 | 0% |
 | 阶段 D | 7 | 0 | 0% |
 | 阶段 E | 6 | 0 | 0% |
@@ -165,7 +165,7 @@
 | 阶段 G | 6 | 0 | 0% |
 | 阶段 H | 5 | 0 | 0% |
 | 阶段 I | 5 | 0 | 0% |
-| **总计** | **68** | **8** | **12%** |
+| **总计** | **68** | **9** | **13%** |
 
 
 ---
@@ -319,6 +319,12 @@
   - `tests/unit/test_custom_evaluator.py`
 - **验收标准**：输入 query + retrieved_ids + golden_ids 能输出稳定 metrics。
 - **测试方法**：`pytest -q tests/unit/test_custom_evaluator.py`。
+- **实现说明**：
+  - `CustomEvaluator` 直接随本任务落地并作为 `evaluator.provider=custom` 的默认实现注册，与 B1–B5 的空注册表不同——评估的最小可用实现没有外部依赖，必须能立刻跑。
+  - 指标只有 `hit_rate`（是否命中任一 golden chunk）与 `mrr`（第一个命中 chunk 的倒数排名）；`evaluation.metrics` 为空时默认两项都算，指定了不支持的指标名直接抛 `EvaluatorError`，不静默忽略。
+  - 标识符提取容错：retrieved/golden 都接受纯 id 字符串、含 `id`/`chunk_id`/`document_id`/`doc_id` 字段的 mapping，以及带 `.id` 属性的对象；取不到 id 时报出是第几个元素、期望哪些字段。
+  - `evaluate()` 签名统一为 `(query, retrieved_chunks, generated_answer=None, ground_truth=None, trace=None)`，`generated_answer` 预留给后续需要生成侧指标的框架（如 faithfulness），本任务不参与计算。
+  - 工厂行为与 B5 一致：`none` 或 `evaluation.enabled=false` → `NoneEvaluator`（返回空 metrics），未知 provider 一律报错。
 
 ### B7：补齐 Libs 默认实现（拆分为≈1h可验收增量）
 
