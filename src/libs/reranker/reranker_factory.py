@@ -77,4 +77,11 @@ def _llm_builder(settings: Settings) -> BaseReranker:
     return LLMReranker(settings.rerank, LLMFactory.create(settings))
 
 
+def _cross_encoder_builder(settings: Settings) -> BaseReranker:
+    from libs.reranker.cross_encoder_reranker import CrossEncoderReranker
+
+    return CrossEncoderReranker(settings.rerank)
+
+
 RerankerFactory.register("llm", _llm_builder)
+RerankerFactory.register("cross_encoder", _cross_encoder_builder)

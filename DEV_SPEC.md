@@ -1972,7 +1972,7 @@ dashboard:
 | B7.5 | Recursive Splitter 默认实现 | [x] | 2026-11-15 | RecursiveSplitter(Markdown 结构感知) + 工厂注册 recursive + 16 个单元测试 |
 | B7.6 | ChromaStore 默认实现 | [x] | 2026-11-15 | ChromaStore(PersistentClient) + 工厂注册 chroma + 共享契约套件实跑 23 个集成测试 |
 | B7.7 | LLM Reranker 实现 | [x] | 2026-11-15 | LLMReranker(读 config/prompts/rerank.txt) + 严格 JSON schema 校验 + 失败回退 + 23 个单元测试 |
-| B7.8 | Cross-Encoder Reranker 实现 | [ ] | | |
+| B7.8 | Cross-Encoder Reranker 实现 | [x] | 2026-11-15 | CrossEncoderReranker(可注入 scorer) + 工厂注册 cross_encoder + 超时回退 + 17 个单元测试 |
 | B8 | Vision LLM 抽象接口与工厂集成 | [ ] | | |
 | B9 | Azure Vision LLM 实现 | [ ] | | |
 
@@ -2067,7 +2067,7 @@ dashboard:
 | 阶段 | 总任务数 | 已完成 | 进度 |
 |------|---------|--------|------|
 | 阶段 A | 3 | 3 | 100% |
-| 阶段 B | 16 | 13 | 81% |
+| 阶段 B | 16 | 14 | 88% |
 | 阶段 C | 15 | 0 | 0% |
 | 阶段 D | 7 | 0 | 0% |
 | 阶段 E | 6 | 0 | 0% |
@@ -2075,7 +2075,7 @@ dashboard:
 | 阶段 G | 6 | 0 | 0% |
 | 阶段 H | 5 | 0 | 0% |
 | 阶段 I | 5 | 0 | 0% |
-| **总计** | **68** | **16** | **24%** |
+| **总计** | **68** | **17** | **25%** |
 
 
 ---
@@ -2373,6 +2373,11 @@ dashboard:
   - backend=cross_encoder 时 `RerankerFactory` 可创建。
   - 提供超时/失败回退信号（供 Core 层 `D6` fallback 使用）。
 - **测试方法**：`pytest -q tests/unit/test_cross_encoder_reranker.py`。
+- **实现说明**：
+  - scorer 从外部注入而不是在 reranker 内部构建，因此排序与回退逻辑可以确定性测试，不必下载模型；`sentence-transformers` 只在真正要用真实模型时才 import，缺失时给出可读的安装提示。
+  - 只对 `rerank.top_k` 范围内的候选打分——cross-encoder 要把 query 和 passage 一起读，这是最贵的一步，超出 top_k 的候选保持检索器原顺序接在后面。
+  - scorer 超时或抛异常、以及返回的分数个数与候选数对不上时，都保留原顺序并置 `fallback_used=True`，供 Core 层 D6 使用。
+  - 默认模型 `cross-encoder/ms-marco-MiniLM-L-6-v2`，可用 `rerank.model` 覆盖。
 
 ### B8：Vision LLM 抽象接口与工厂集成
 - **目标**：定义 `BaseVisionLLM` 抽象接口，扩展 `LLMFactory` 支持 Vision LLM 创建，为 C7 的 ImageCaptioner 提供底层抽象。
