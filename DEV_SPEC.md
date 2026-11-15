@@ -1967,7 +1967,7 @@ dashboard:
 | B6 | Evaluator 抽象接口与工厂 | [x] | 2026-11-15 | BaseEvaluator 抽象基类 + NoneEvaluator 回退 + CustomEvaluator(hit_rate/mrr) + EvaluatorFactory + 30 个单元测试 |
 | B7.1 | OpenAI-Compatible LLM 实现 | [x] | 2026-11-15 | 共享 JSONHttpClient + OpenAILLM/AzureLLM/DeepSeekLLM + ChatResponse 契约 + 22 个 mock HTTP 测试 |
 | B7.2 | Ollama LLM 实现 | [x] | 2026-11-15 | OllamaLLM(/api/chat) + OllamaLLMError + 工厂注册 + 12 个 mock HTTP 测试 |
-| B7.3 | OpenAI & Azure Embedding 实现 | [ ] | | |
+| B7.3 | OpenAI & Azure Embedding 实现 | [x] | 2026-11-15 | OpenAIEmbedding/AzureEmbedding + HTTPEmbeddingProvider 批量与长度校验 + 23 个 mock HTTP 测试 |
 | B7.4 | Ollama Embedding 实现 | [ ] | | |
 | B7.5 | Recursive Splitter 默认实现 | [ ] | | |
 | B7.6 | ChromaStore 默认实现 | [ ] | | |
@@ -2067,7 +2067,7 @@ dashboard:
 | 阶段 | 总任务数 | 已完成 | 进度 |
 |------|---------|--------|------|
 | 阶段 A | 3 | 3 | 100% |
-| 阶段 B | 16 | 8 | 50% |
+| 阶段 B | 16 | 9 | 56% |
 | 阶段 C | 15 | 0 | 0% |
 | 阶段 D | 7 | 0 | 0% |
 | 阶段 E | 6 | 0 | 0% |
@@ -2075,7 +2075,7 @@ dashboard:
 | 阶段 G | 6 | 0 | 0% |
 | 阶段 H | 5 | 0 | 0% |
 | 阶段 I | 5 | 0 | 0% |
-| **总计** | **68** | **11** | **16%** |
+| **总计** | **68** | **12** | **18%** |
 
 
 ---
@@ -2285,6 +2285,12 @@ dashboard:
   - 空输入、超长输入有明确行为（报错或截断策略由配置决定）。
   - Azure 实现复用 OpenAI Embedding 的核心逻辑，保持行为一致性。
 - **测试方法**：`pytest -q tests/unit/test_embedding_providers_smoke.py`。
+- **实现说明**：
+  - 两者都 POST 到 `/embeddings`，差异只在 URL 与鉴权头，因此 `HTTPEmbeddingProvider` 负责批量上限与长度校验，`OpenAIEmbedding` 负责请求体与响应解析，`AzureEmbedding` 只覆写 URL/头/请求体三处。
+  - `dimensions` 只对 `text-embedding-3` 系列下发，旧模型（ada-002 等）收到该字段会直接报错，因此按模型名前缀决定是否携带。
+  - Azure 的 deployment 已经确定了模型，请求体里不再带 `model`。
+  - 响应按 `index` 排序后再校验数量，保证批量返回值与输入文本一一对应；数量对不上直接报错，避免静默错位。
+  - 空批次、空白文本、超长文本（>32000 字符）、非字符串元素统一在发请求前报 `EmbeddingError`，不把非法输入送到远端。
 
 ### B7.4：Ollama Embedding 实现
 - **目标**：补齐 `ollama_embedding.py`，支持通过 Ollama HTTP API 调用本地部署的 Embedding 模型（如 `nomic-embed-text`、`mxbai-embed-large` 等），实现 `embed(texts)` 批量向量化功能。

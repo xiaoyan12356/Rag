@@ -61,3 +61,19 @@ class EmbeddingFactory:
                 "which is not a BaseEmbedding"
             )
         return embedding
+
+
+def _openai_builder(settings: Settings) -> BaseEmbedding:
+    from libs.embedding.openai_embedding import OpenAIEmbedding
+
+    return OpenAIEmbedding(settings.embedding)
+
+
+def _azure_builder(settings: Settings) -> BaseEmbedding:
+    from libs.embedding.azure_embedding import AzureEmbedding
+
+    return AzureEmbedding(settings.embedding)
+
+
+EmbeddingFactory.register("openai", _openai_builder)
+EmbeddingFactory.register("azure", _azure_builder)
