@@ -11,10 +11,10 @@ from typing import Any
 
 import pytest
 
+from core.query_engine.dense_retriever import DenseRetriever
 from core.settings import EmbeddingSettings, RetrievalSettings, Settings, VectorStoreSettings
 from core.trace.trace_context import TraceContext
 from core.types import RetrievalResult
-from core.query_engine.dense_retriever import DenseRetriever
 from libs.embedding.base_embedding import BaseEmbedding
 from libs.vector_store.base_vector_store import BaseVectorStore
 

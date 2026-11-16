@@ -8,50 +8,27 @@ needs no credentials and no network.
 
 from __future__ import annotations
 
-import json
 import subprocess
 import sys
-import threading
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
 import yaml
+from stub_embedding_server import DIMENSION, start_stub_server, stop_stub_server
 
 pytestmark = pytest.mark.e2e
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "ingest.py"
 FIXTURES = REPO_ROOT / "tests" / "fixtures" / "sample_documents"
-DIMENSION = 8
-
-
-class StubEmbeddingHandler(BaseHTTPRequestHandler):
-    """Answers every embedding request with the same vector."""
-
-    def do_POST(self) -> None:
-        length = int(self.headers.get("Content-Length", 0))
-        self.rfile.read(length)
-        body = json.dumps({"embedding": [0.25] * DIMENSION}).encode("utf-8")
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-    def log_message(self, *args: object) -> None:
-        pass
 
 
 @pytest.fixture
 def embedding_server():
     """A local server that answers the embedding requests."""
-    server = ThreadingHTTPServer(("127.0.0.1", 0), StubEmbeddingHandler)
-    thread = threading.Thread(target=server.serve_forever, daemon=True)
-    thread.start()
-    yield f"http://127.0.0.1:{server.server_address[1]}"
-    server.shutdown()
-    server.server_close()
+    address, server = start_stub_server()
+    yield address
+    stop_stub_server(server)
 
 
 @pytest.fixture
