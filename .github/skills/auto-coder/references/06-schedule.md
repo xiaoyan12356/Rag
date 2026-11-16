@@ -75,7 +75,7 @@
 | C3 | Loader 抽象基类与 PDF Loader | [x] | 2026-11-16 | BaseLoader/LoaderError + PdfLoader(MarkItDown 文本 + PyMuPDF 图片提取与占位符) + with_images.pdf 样例 + 40 个单元测试 |
 | C4 | Splitter 集成（调用 Libs） | [x] | 2026-11-16 | DocumentChunker 适配器(稳定 chunk id + 元数据继承 + 图片按需分发) + 27 个单元测试 |
 | C5 | Transform 基类 + ChunkRefiner | [x] | 2026-11-16 | BaseTransform 抽象契约 + TraceContext 最小实现 + ChunkRefiner(规则去噪 + LLM 增强 + 降级) + 49 个单元测试 + 7 个真实 LLM 集成测试 |
-| C6 | MetadataEnricher | [ ] | | |
+| C6 | MetadataEnricher | [x] | 2026-11-16 | MetadataEnricher(规则 title/summary/tags + 可选 LLM JSON 提取 + 降级) + metadata_enrichment prompt + 39 个单元测试 + 6 个真实 LLM 集成测试 |
 | C7 | ImageCaptioner | [ ] | | |
 | C8 | DenseEncoder | [ ] | | |
 | C9 | SparseEncoder | [ ] | | |
@@ -158,14 +158,14 @@
 |------|---------|--------|------|
 | 阶段 A | 3 | 3 | 100% |
 | 阶段 B | 16 | 14 | 88% |
-| 阶段 C | 15 | 5 | 33% |
+| 阶段 C | 15 | 6 | 40% |
 | 阶段 D | 7 | 0 | 0% |
 | 阶段 E | 6 | 0 | 0% |
 | 阶段 F | 5 | 0 | 0% |
 | 阶段 G | 6 | 0 | 0% |
 | 阶段 H | 5 | 0 | 0% |
 | 阶段 I | 5 | 0 | 0% |
-| **总计** | **68** | **22** | **32%** |
+| **总计** | **68** | **23** | **34%** |
 
 
 ---
@@ -734,6 +734,14 @@
   - **LLM 模式（核心）**：在 LLM 打开的情况下，确保真实调用 LLM（或高质量 Mock）并生成语义丰富的 metadata。需验证在有真实 LLM 配置下的连通性与效果。
   - 降级行为：LLM 调用失败时回退到规则模式结果（可在 metadata 标记降级原因，但不抛出致命异常）。
 - **测试方法**：`pytest -q tests/unit/test_metadata_enricher_contract.py`，并确保包含开启 LLM 的集成测试用例。
+- **实现说明**：
+  - 规则模式永远先跑，所以每个 chunk 都带着 `title/summary/tags` 出来，哪怕模型根本没被问到；这是"规则是兜底、LLM 是增强"的顺序，不是反过来。
+  - 规则抽取：title 优先取前 3 行的 Markdown 标题，其次取首行（首行以标点结尾则跳过），再退到首句；summary 取正文前 3 句（标题行不算正文）；tags 依次取专有名词、标识符（camelCase / snake_case）、加粗词，再按词频补足到 10 个，常见词进停用词表。
+  - LLM 模式把 `config/prompts/metadata_enrichment.txt` 里的 `{chunk_text}` 换成正文（最多 2000 字符），要求模型回一个 JSON 对象；解析时容忍 ```json 围栏和前后多余文字，但缺 `title` 或不是 JSON 一律当作失败。
+  - 合并策略：模型给了非空值就用模型的，空值用规则的补上，所以任何一次模型输出都不会让 chunk 少字段。
+  - 降级：模型报错/返回空/返回的不是 JSON/prompt 缺 `{chunk_text}`/prompt 文件不存在 → 全部回退规则结果，写 `enriched_by: "rule"` + `enrich_fallback_reason: "llm_failed"`；chunk 本身处理异常则标 `enriched_by: "failed"` 并保底写一个 title，不影响其他 chunk。
+  - 顺手把真实 LLM 集成测试共用的"provider 可达性判断 + 跳过逻辑"抽到 `tests/integration/conftest.py` 的 `llm_settings` fixture，C5 的集成测试同步改用它，后续 C7 及 D/E 阶段的集成测试都能复用。
+  - 单元测试 39 个（`tests/unit/test_metadata_enricher_contract.py`），真实 LLM 集成测试 6 个（`tests/integration/test_metadata_enricher_llm.py`）——本机同样没有可用凭证，因此集成测试全部 skip。
 
 ### C7：ImageCaptioner（可选生成 caption + 降级不阻塞）
 - **目标**：实现 `image_captioner.py`：当启用 Vision LLM 且存在 image_refs 时生成 caption 并写回 chunk metadata；当禁用/不可用/异常时走降级路径，不阻塞 ingestion。

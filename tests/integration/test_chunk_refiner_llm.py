@@ -10,12 +10,9 @@ Run with:
 
 from __future__ import annotations
 
-import socket
-from urllib.parse import urlparse
-
 import pytest
 
-from core.settings import Settings, SettingsError, load_settings
+from core.settings import Settings
 from core.trace.trace_context import TraceContext
 from core.types import Chunk
 from ingestion.transform.chunk_refiner import ChunkRefiner
@@ -51,68 +48,12 @@ EXPECTED_KEYWORDS = [
     "Authentication Service",
 ]
 
-# Providers that talk to a local server instead of a hosted API.
-LOCAL_PROVIDERS = {"ollama"}
-
-
-def _settings() -> Settings:
-    """Return the settings of the repository, or skip when there are none."""
-    try:
-        return load_settings()
-    except SettingsError as exc:
-        pytest.skip(f"No usable configuration: {exc}")
-
-
-def _local_server_is_up(base_url: str) -> bool:
-    """Return whether the local server behind `base_url` accepts connections."""
-    if not base_url:
-        return False
-    parsed = urlparse(base_url if "://" in base_url else f"http://{base_url}")
-    host = parsed.hostname
-    port = parsed.port or (443 if parsed.scheme == "https" else 80)
-    if not host:
-        return False
-    try:
-        with socket.create_connection((host, port), timeout=2):
-            return True
-    except OSError:
-        return False
-
-
-def _why_unusable(settings: Settings) -> str:
-    """Return why the configured provider cannot be used, or an empty string."""
-    provider = (settings.llm.provider or "").strip().lower()
-    if not provider:
-        return "no llm provider is configured"
-
-    if provider in LOCAL_PROVIDERS:
-        if not _local_server_is_up(settings.llm.base_url):
-            return f"the {provider} server at {settings.llm.base_url!r} is not reachable"
-        return ""
-
-    if not (settings.llm.api_key or "").strip():
-        return f"no api key is configured for {provider}"
-
-    if provider == "azure" and not (settings.llm.azure_endpoint or "").strip():
-        return "no azure endpoint is configured"
-
-    return ""
-
-
-def _usable_settings() -> Settings:
-    """Return the settings of a provider that can be reached."""
-    settings = _settings()
-    reason = _why_unusable(settings)
-    if reason:
-        pytest.skip(f"Skipping the LLM test: {reason}")
-    settings.ingestion.chunk_refiner.use_llm = True
-    return settings
-
 
 @pytest.fixture
-def refiner() -> ChunkRefiner:
+def refiner(llm_settings: Settings) -> ChunkRefiner:
     """Return a refiner that talks to the configured provider."""
-    return ChunkRefiner(_usable_settings())
+    llm_settings.ingestion.chunk_refiner.use_llm = True
+    return ChunkRefiner(llm_settings)
 
 
 @pytest.fixture
@@ -185,11 +126,13 @@ class TestRealLlmRefinement:
 
 
 class TestFallbackAgainstARealProvider:
-    def test_an_unreachable_model_falls_back_to_the_rules(self, chunk: Chunk):
-        settings = _usable_settings()
-        settings.llm.model = "a-model-that-does-not-exist"
+    def test_an_unreachable_model_falls_back_to_the_rules(
+        self, llm_settings: Settings, chunk: Chunk
+    ):
+        llm_settings.ingestion.chunk_refiner.use_llm = True
+        llm_settings.llm.model = "a-model-that-does-not-exist"
 
-        refined = ChunkRefiner(settings).transform([chunk])
+        refined = ChunkRefiner(llm_settings).transform([chunk])
 
         assert len(refined) == 1
         assert refined[0].metadata["refined_by"] == "rule"
