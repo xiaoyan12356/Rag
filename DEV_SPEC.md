@@ -2012,53 +2012,53 @@ dashboard:
 
 | 任务编号 | 任务名称 | 状态 | 完成日期 | 备注 |
 |---------|---------|------|---------|------|
-| E1 | MCP Server 入口与 Stdio 约束 | [ ] | | |
-| E2 | Protocol Handler 协议解析与能力协商 | [ ] | | |
-| E3 | query_knowledge_hub Tool | [ ] | | |
-| E4 | list_collections Tool | [ ] | | |
-| E5 | get_document_summary Tool | [ ] | | |
-| E6 | 多模态返回组装（Text + Image） | [ ] | | |
+| E1 | MCP Server 入口与 Stdio 约束 | [x] | 2026-11-16 | mcp_server/server.py（SDK 模式 + plain 模式）+ main.py 入口 + stdout 只走协议、日志走 stderr + 21 个集成测试 |
+| E2 | Protocol Handler 协议解析与能力协商 | [x] | 2026-11-16 | ProtocolHandler(initialize/tools/list/tools/call + JSON-RPC 错误码 -32600/-32601/-32602/-32603) + 单元测试 |
+| E3 | query_knowledge_hub Tool | [x] | 2026-11-16 | ResponseBuilder + CitationGenerator + Tool 入口（参数校验 + trace 落盘）+ 引用标注 Markdown |
+| E4 | list_collections Tool | [x] | 2026-11-16 | 目录集合 + 向量库集合合并（名称 + chunk 数）+ 18 个单元测试 |
+| E5 | get_document_summary Tool | [x] | 2026-11-16 | 按 doc_id 返回 title/summary/tags + 不存在时给出规范错误 + 单元测试 |
+| E6 | 多模态返回组装（Text + Image） | [x] | 2026-11-16 | MultimodalAssembler(chunk 图片引用 → base64 ImageContent，文本在前) + 集成测试 |
 
 #### 阶段 F：Trace 基础设施与打点
 
 | 任务编号 | 任务名称 | 状态 | 完成日期 | 备注 |
 |---------|---------|------|---------|------|
-| F1 | TraceContext 增强（finish + 耗时统计 + trace_type） | [ ] | | |
-| F2 | 结构化日志 logger（JSON Lines） | [ ] | | |
-| F3 | 在 Query 链路打点 | [ ] | | |
-| F4 | 在 Ingestion 链路打点 | [ ] | | |
-| F5 | Pipeline 进度回调 (on_progress) | [ ] | | |
+| F1 | TraceContext 增强（finish + 耗时统计 + trace_type） | [x] | 2026-11-16 | TraceContext(record_stage/annotate_stage/elapsed_ms/finish/to_dict) + TraceCollector(JSON Lines 落盘) + 29 个单元测试 |
+| F2 | 结构化日志 logger（JSON Lines） | [x] | 2026-11-16 | observability/logger.py（JSON Lines + 轮转 + 上下文注入）+ 单元测试 |
+| F3 | 在 Query 链路打点 | [x] | 2026-11-16 | HybridSearch/Reranker 记录 query_processing/dense/sparse/fusion/rerank 五个阶段 + 集成测试 |
+| F4 | 在 Ingestion 链路打点 | [x] | 2026-11-16 | Pipeline 六步打点（integrity/load/split/transform/embed/upsert + method/provider）+ 集成测试 |
+| F5 | Pipeline 进度回调 (on_progress) | [x] | 2026-11-16 | on_progress(stage, step, total) + 嵌入批次进度 embed_batch + 单元测试 |
 
 #### 阶段 G：可视化管理平台 Dashboard
 
 | 任务编号 | 任务名称 | 状态 | 完成日期 | 备注 |
 |---------|---------|------|---------|------|
-| G1 | Dashboard 基础架构与系统总览页 | [ ] | | |
-| G2 | DocumentManager 实现 | [ ] | | |
-| G3 | 数据浏览器页面 | [ ] | | |
-| G4 | Ingestion 管理页面 | [ ] | | |
-| G5 | Ingestion 追踪页面 | [ ] | | |
-| G6 | Query 追踪页面 | [ ] | | |
+| G1 | Dashboard 基础架构与系统总览页 | [x] | 2026-11-16 | Streamlit st.navigation 六页面骨架 + ConfigService 组件卡片 + 总览页 + scripts/start_dashboard.py |
+| G2 | DocumentManager 实现 | [x] | 2026-11-16 | 跨四存储的文档生命周期（向量库/BM25/图片/历史）+ list/detail/delete/stats + 单元测试 |
+| G3 | 数据浏览器页面 | [x] | 2026-11-16 | 集合选择 + 文档列表 + chunk 明细 + 删除入口 |
+| G4 | Ingestion 管理页面 | [x] | 2026-11-16 | 上传即摄取（进度回调）+ 已摄取文档删除 + 失败提示 |
+| G5 | Ingestion 追踪页面 | [x] | 2026-11-16 | 摄取运行列表 + 步骤瀑布图 + 各步数据 |
+| G6 | Query 追踪页面 | [x] | 2026-11-16 | 提问列表 + dense/sparse 双路对比 + 融合 + 重排前后顺序 + 单题评估 |
 
 #### 阶段 H：评估体系
 
 | 任务编号 | 任务名称 | 状态 | 完成日期 | 备注 |
 |---------|---------|------|---------|------|
-| H1 | RagasEvaluator 实现 | [ ] | | |
-| H2 | CompositeEvaluator 实现 | [ ] | | |
-| H3 | EvalRunner + Golden Test Set | [ ] | | |
-| H4 | 评估面板页面 | [ ] | | |
-| H5 | Recall 回归测试（E2E） | [ ] | | |
+| H1 | RagasEvaluator 实现 | [x] | 2026-11-16 | RagasEvaluator(faithfulness/answer_relevancy/context_precision + ragas 缺失时明确报错 + 延迟注册) + 单元测试 |
+| H2 | CompositeEvaluator 实现 | [x] | 2026-11-16 | CompositeEvaluator(多评估器结果合并 + 单个失败不影响其他) + 配置驱动组合 + 单元测试 |
+| H3 | EvalRunner + Golden Test Set | [x] | 2026-11-16 | EvalRunner(hit_rate/mrr/逐题明细) + golden_test_set.json + scripts/evaluate.py（--json/--no-search/分级退出码） |
+| H4 | 评估面板页面 | [x] | 2026-11-16 | 评估面板可真正运行评估（选测试集 → 运行 → 指标卡片 + 历史报告） |
+| H5 | Recall 回归测试（E2E） | [x] | 2026-11-16 | tests/e2e/test_recall.py（自建语料 + 假 embedding，hit_rate=1.0 / MRR≥0.8 阈值回归） |
 
 #### 阶段 I：端到端验收与文档收口
 
 | 任务编号 | 任务名称 | 状态 | 完成日期 | 备注 |
 |---------|---------|------|---------|------|
-| I1 | E2E：MCP Client 侧调用模拟 | [ ] | | |
-| I2 | E2E：Dashboard 冒烟测试 | [ ] | | |
-| I3 | 完善 README（运行说明 + MCP + Dashboard） | [ ] | | |
-| I4 | 清理接口一致性（契约测试补齐） | [ ] | | |
-| I5 | 全链路 E2E 验收 | [ ] | | |
+| I1 | E2E：MCP Client 侧调用模拟 | [x] | 2026-11-16 | tests/e2e/test_mcp_client.py（子进程起 server + 真实 JSON-RPC 握手/工具调用/引用断言 + 假 embedding） |
+| I2 | E2E：Dashboard 冒烟测试 | [x] | 2026-11-16 | tests/e2e/test_dashboard_smoke.py（Streamlit AppTest 跑六个页面 + 真实摄取 + 真实 trace） |
+| I3 | 完善 README（运行说明 + MCP + Dashboard） | [x] | 2026-11-16 | 快速开始/配置说明/MCP 配置示例/Dashboard 指南/运行测试/排错 FAQ 六节 + 目录 |
+| I4 | 清理接口一致性（契约测试补齐） | [x] | 2026-11-16 | VectorStore 契约补 delete_by_metadata/list_collections + Reranker/Evaluator 工厂与边界契约测试 |
+| I5 | 全链路 E2E 验收 | [x] | 2026-11-16 | ingest → query → MCP → Dashboard → evaluate 全链路实跑通过（1310 passed / 13 skipped） |
 
 ---
 
@@ -2070,12 +2070,12 @@ dashboard:
 | 阶段 B | 16 | 16 | 100% |
 | 阶段 C | 15 | 15 | 100% |
 | 阶段 D | 7 | 7 | 100% |
-| 阶段 E | 6 | 0 | 0% |
-| 阶段 F | 5 | 0 | 0% |
-| 阶段 G | 6 | 0 | 0% |
-| 阶段 H | 5 | 0 | 0% |
-| 阶段 I | 5 | 0 | 0% |
-| **总计** | **68** | **41** | **60%** |
+| 阶段 E | 6 | 6 | 100% |
+| 阶段 F | 5 | 5 | 100% |
+| 阶段 G | 6 | 6 | 100% |
+| 阶段 H | 5 | 5 | 100% |
+| 阶段 I | 5 | 5 | 100% |
+| **总计** | **68** | **68** | **100%** |
 
 
 ---
@@ -3045,6 +3045,10 @@ dashboard:
   - `tests/integration/test_mcp_server.py`
 - **验收标准**：启动 server 能完成 initialize；stderr 有日志但 stdout 不污染。
 - **测试方法**：`pytest -q tests/integration/test_mcp_server.py`（子进程方式）。
+- **实现说明**：
+  - `server.py` 提供两种模式：`--mode sdk` 走官方 MCP SDK 的 `stdio_server()`，`--mode plain` 自己解析 JSON-RPC。plain 模式存在的理由是 SDK 会把异常统一收敛成 `code=0` 的通用错误，而协议要求"方法不存在"是 -32601、"参数不对"是 -32602，所以错误码需要自己掌握。
+  - stdout 纪律是硬约束：日志全部走 stderr，集成测试逐行解析 stdout 并断言每一行都是合法 JSON，同时断言 stdout 里不出现 `INFO` 之类的日志字样。
+  - `main.py` 只做启动参数（`--config` / `--mode` / `--collection`）与进程入口；配置文件路径也可用环境变量 `SMART_KNOWLEDGE_HUB_CONFIG` 指定，命令行优先。
 
 ### E2：Protocol Handler 协议解析与能力协商
 - **目标**：实现 `mcp_server/protocol_handler.py`：封装 JSON-RPC 2.0 协议解析，处理 `initialize`、`tools/list`、`tools/call` 三类核心方法，并实现规范的错误处理。
@@ -3064,6 +3068,11 @@ dashboard:
   - 发送 `tools/call` 能正确路由并返回结果或规范错误
   - **错误处理**：无效方法返回 -32601，参数错误返回 -32602，内部异常返回 -32603 且不泄露堆栈
 - **测试方法**：`pytest -q tests/unit/test_protocol_handler.py`。
+- **实现说明**：
+  - `ProtocolHandler` 把"解析"和"分发"分成两层：`parse()` 负责把一行原始文本变成消息（不是合法 JSON 就返回 -32700），`handle_message()` 负责把消息变成响应，通知类消息（没有 id）返回 `None`，不回任何东西。
+  - 错误码自己定义成常量（-32700 / -32600 / -32601 / -32602 / -32603），而不是用 SDK 的通用错误。客户端要能区分"方法不存在"和"参数不对"，这两者混成一个错误码就没法给出有意义的提示。
+  - 内部异常统一收敛成 -32603，响应里只给一句摘要，不带堆栈；堆栈写进 stderr 的日志，排查问题时还能拿到，对客户端不泄漏内部结构。
+  - 工具的注册表在 handler 里是"名字 → 调用函数"的映射，新增工具只加一行，不用改分发逻辑。
 
 ### E3：实现 tool：query_knowledge_hub
 - **目标**：实现 `tools/query_knowledge_hub.py`：调用 HybridSearch + Reranker，构建带引用的响应，返回 Markdown + structured citations。
@@ -3083,6 +3092,11 @@ dashboard:
   - `structuredContent.citations` 包含 `source`/`page`/`chunk_id`/`score` 字段
   - 无结果时返回友好提示而非空数组
 - **测试方法**：`pytest -q tests/integration/test_mcp_server.py -k query_knowledge_hub`。
+- **实现说明**：
+  - 工具层保持薄：参数校验 → 检索 → 重排 → 组装响应，真正的活儿都交给 Core 的 `HybridSearch` 和 `Reranker`。`scripts/query.py` 和这个工具跑的是同一套链路，区别只在输出格式（终端文本 vs MCP 结构）。
+  - `ResponseBuilder` 和 `CitationGenerator` 分开：Builder 管 Markdown 文本和 `MCPToolResult` 的形状，Citation 管每条引用的 `source`/`page`/`chunk_id`/`score`。引用的字段和写法只在一个地方定义，改格式不会漏改一半。
+  - 没查到东西时返回一段说明文字（告诉使用者先摄取文档），而不是空的 content 数组。agent 拿到空数组分不清是"确实没有"还是"调用挂了"。
+  - 检索引擎按 `(persist_directory, collection)` 缓存复用：它持有 embedding 客户端和索引句柄，每次调用重建等于把模型连接和索引加载重做一遍。
 
 ### E4：实现 tool：list_collections
 - **目标**：实现 `tools/list_collections.py`：列出 `data/documents/` 下集合并附带统计（可延后到下一步）。
@@ -3091,6 +3105,11 @@ dashboard:
   - `tests/unit/test_list_collections.py`
 - **验收标准**：对 fixtures 中的目录结构能返回集合名列表。
 - **测试方法**：`pytest -q tests/unit/test_list_collections.py`。
+- **实现说明**：
+  - 集合有两个来源：`data/documents/` 下的目录（文件系统）和向量库里的 collection（索引）。只报目录，摄取完之后仍然显示"没有集合"；只报索引，又看不到还没摄取内容的目录——两者合并才能给出真实的全景。
+  - 索引那部分通过 `VectorStore` 抽象接口的 `list_collections()` 拿，工具层不直接依赖 Chroma，换后端不用改工具代码。
+  - 合并按名字对齐：同一个集合以文件系统那份为准（文档数更准），把索引里的 chunk 数补进去；只在索引里出现的集合补一条文档数为 0 的记录。
+  - 向量库读不出来（后端没起、索引不存在）时只记一条 warning，然后照常返回文件夹那份——列集合是只读操作，不该因为索引不可用就整体失败。
 
 ### E5：实现 tool：get_document_summary
 - **目标**：实现 `tools/get_document_summary.py`：按 doc_id 返回 title/summary/tags（可先从 metadata/缓存取）。
@@ -3099,6 +3118,11 @@ dashboard:
   - `tests/unit/test_get_document_summary.py`
 - **验收标准**：对不存在 doc_id 返回规范错误；存在时返回结构化信息。
 - **测试方法**：`pytest -q tests/unit/test_get_document_summary.py`。
+- **实现说明**：
+  - 文档信息不另存一份缓存：title / summary / tags 在摄取时写进了 chunk 的 metadata，工具从向量库里找出这个文档的 chunk 再读出来，摄取侧不用多维护一份状态。
+  - `doc_id` 三种叫法都认：chunk 里的 `doc_id`、文件内容的 sha256、以及 `source_path`（含文件名和主名）。agent 手上多半只有路径，让它自己猜 hash 不合理。
+  - metadata 取的是 `chunk_index == 0` 的那条；不是第一条就取错的话，多 chunk 文档的标题可能来自中间某个块。
+  - 找不到文档时返回 `is_error=True` 的结构化结果，而不是抛异常：这是给 agent 用的工具，"没有这个文档"是一个正常答案，不是调用失败。
 
 ### E6：多模态返回组装（Text + Image）
 - **目标**：实现 `multimodal_assembler.py`：命中 chunk 含 image_refs 时读取图片并 base64 返回 ImageContent。
@@ -3107,6 +3131,11 @@ dashboard:
   - `tests/integration/test_mcp_server.py`（补图像返回用例）
 - **验收标准**：返回 content 中包含 image type，mimeType 正确，data 为 base64 字符串。
 - **测试方法**：`pytest -q tests/integration/test_mcp_server.py -k image`。
+- **实现说明**：
+  - `MultimodalAssembler` 只做一件事：把命中 chunk 指向的图片变成 base64 的 `ImageContent`。不检索、不拼答案，职责单一才好测——单元测试直接喂几条 `RetrievalResult` 就能验证。
+  - 图片路径有两个来源：chunk metadata 里带的 `images` 列表，和 `ImageStorage` 索引（用 image_id 查存储路径）。前者是摄取时写进 metadata 的快照，后者是权威来源，优先用它，metadata 里的路径只作兜底。
+  - 读不到或者编码失败的文件直接跳过，不让整个回答失败。一张图坏了不该把检索到的文本全部作废。
+  - 返回顺序固定为"先文本、后图片"，客户端按 `content` 顺序渲染才不会图文错位。
 
 ---
 
@@ -3129,6 +3158,12 @@ dashboard:
   - `finish()` 后 `to_dict()` 输出包含 `trace_id`、`trace_type`、`started_at`、`finished_at`、`total_elapsed_ms`、`stages`
   - 输出 dict 可直接 `json.dumps()` 序列化
 - **测试方法**：`pytest -q tests/unit/test_trace_context.py`。
+- **实现说明**：
+  - `TraceContext` 只做内存里的数据结构和计时，不碰任何 IO。落盘交给 F2 的 collector，职责分开之后追踪逻辑可以脱离文件单独测。
+  - `finish()` 是幂等的：重复调用不会把已经算好的耗时清零，采集端可以放心地在 `finally` 里调用。
+  - `annotate_stage()` 用来往已记录的阶段上补字段（method、provider、耗时），而不是重新 `record_stage()` 一次——一次运行里阶段名是唯一的，重记会覆盖掉原来的 details。
+  - `to_dict()` 的返回值保证全是 JSON 原生类型，可以直接 `json.dumps()`，不需要调用方再做一次转换。
+  - `collect_trace(trace, settings)` 是便捷入口：它读配置里的 trace 文件路径，没有配置就返回 False（不写），配置里关掉了追踪也不写。
 
 
 ### F2：结构化日志 logger（JSON Lines）
@@ -3145,6 +3180,11 @@ dashboard:
   - F2 负责将 `trace.to_dict()` 的结果持久化到文件
 - **验收标准**：写入一条 trace 后文件新增一行合法 JSON，包含 `trace_type` 字段。
 - **测试方法**：`pytest -q tests/unit/test_jsonl_logger.py`。
+- **实现说明**：
+  - 两种输出写进同一个 `logs/traces.jsonl`：普通日志用 `JSONFormatter` 打成 JSON 行，追踪记录用 `write_trace()` 单独写。Dashboard 只要读一个文件就能看到全部，不用同时挂两个来源。
+  - 追踪走独立的 logger（`trace`），不挂在 root logger 下面——把日志级别调成 WARNING 不应该导致追踪记录消失。
+  - 写之前先 `finish()`，保证每行都带 `total_elapsed_ms`；一个 trace 一行，追加写不覆盖历史，Dashboard 可以按行增量读。
+  - 文件句柄用追加模式、每次写完就关，进程被 kill 也不会留下半行 JSON。
 
 ### F3：在 Query 链路打点
 - **目标**：在 HybridSearch/Rerank 中注入 TraceContext（`trace_type="query"`），利用 B 阶段抽象接口中预留的 `trace` 参数，显式调用 `trace.record_stage()` 记录各阶段数据。
@@ -3159,6 +3199,11 @@ dashboard:
   - 每个阶段记录 `elapsed_ms` 耗时字段和 `method` 字段
   - `trace.to_dict()` 中 `trace_type == "query"`
 - **测试方法**：`pytest -q tests/integration/test_hybrid_search.py`。
+- **实现说明**：
+  - 打点分两层：干活的部件（retriever、fusion、reranker）自己 `record_stage()` 记下它处理了什么，`HybridSearch` 只用 `annotate_stage()` 补上它才知道的 `method`/`provider`/耗时。各自记各自知道的，追踪页不用反推是哪条路径。
+  - Dense 和 Sparse 是并发问的（一个要等 embedding 服务，一个读磁盘上的索引），顺序不固定，但两条都记——追踪页的"Dense vs Sparse 并列对比"靠的就是这两条。
+  - 一条路挂了不拖垮另一条：`_safe_dense` / `_safe_sparse` 把异常收成返回值，两条都挂才抛 RuntimeError。单路失败时仍然出结果，追踪里留下失败的那一段。
+  - 阶段名固定为 `query_processing`/`dense_retrieval`/`sparse_retrieval`/`fusion`/`rerank`，Dashboard 按名字取数据，名字变了页面就瞎了，所以列在这里当契约用。
 
 ### F4：在 Ingestion 链路打点
 - **目标**：在 IngestionPipeline 中注入 TraceContext（`trace_type="ingestion"`），记录各摄取阶段的处理数据。
@@ -3171,6 +3216,11 @@ dashboard:
   - 每个阶段记录 `elapsed_ms`、`method`（如 markitdown/recursive/chroma）和处理详情
   - `trace.to_dict()` 中 `trace_type == "ingestion"`
 - **测试方法**：`pytest -q tests/integration/test_ingestion_pipeline.py`。
+- **实现说明**：
+  - 摄取的阶段固定为 `integrity`/`load`/`split`/`transform`/`embed`/`upsert`（`STAGES` 常量），每个阶段一条记录，details 里带上处理的文档数、chunk 数、图片数这些量。追踪页的瀑布图按阶段名取，名字是契约。
+  - `embed` 阶段是分批做的，每批单独记一次，所以记录里能看到批号。embedding 慢的时候能直接看出是第几批拖的后腿，而不是只知道"向量化很慢"。
+  - `integrity` 排在最前面：文件没变的话整篇文档被跳过，这一步的记录说明了"为什么这次只处理了 1 篇"，否则追踪会显得漏了文档。
+  - 追踪和进度回调是两条独立的出口：打点写文件，回调推给界面，互不阻塞。
 
 ### F5：Pipeline 进度回调 (on_progress)
 - **目标**：在 `IngestionPipeline.run()` 方法中新增可选 `on_progress` 回调参数，支持外部实时获取处理进度。
@@ -3184,6 +3234,11 @@ dashboard:
   - 各阶段在处理每个 batch 或完成时触发回调
 - **验收标准**：Pipeline 运行时传入 mock 回调，断言各阶段均被调用且参数正确。
 - **测试方法**：`pytest -q tests/unit/test_pipeline_progress.py`。
+- **实现说明**：
+  - 回调签名是 `(stage_name, current, total)`，正好能直接喂给 Streamlit 的 `st.progress(current / total)`，Dashboard 那边不需要写转换层。
+  - 两种粒度都报：阶段级（`stage`/`step`/`len(STAGES)`）用来画总进度条，批次级（`embed_batch`/`batch`/`batches`）用来在向量化的时候显示卡在哪一批。
+  - `on_progress` 是可选参数，为 None 时的行为和加这个特性之前完全一致——命令行摄取不传回调，不该多付任何代价。
+  - 回调是同步直接调用的，抛出的异常会原样往上抛，不会被包成 `PipelineError`。所以回调要写得轻（Dashboard 那边只是更新一下进度条），耗时的事放在回调之外做。
 
 ---
 
@@ -3203,6 +3258,11 @@ dashboard:
   - `ConfigService`：封装 Settings 读取，格式化组件配置信息
 - **验收标准**：`streamlit run src/observability/dashboard/app.py` 可启动，总览页展示当前配置信息。
 - **测试方法**：手动运行 `python scripts/start_dashboard.py` 并验证页面渲染。
+- **实现说明**：
+  - 六个页面用 `st.navigation` + `st.Page` 注册，导航和页面隔离交给 Streamlit。每个页面是一个独立模块，自己 import 自己的 service，页面之间不互相 import——加页面不会牵动别的页面。
+  - Overview 页只读：展示配置和数据统计，不做任何写操作。打开看板不该改变系统状态。
+  - `ConfigService` 把嵌套的 `Settings` 摊平成卡片要的字段，页面不再直接摸 `settings.llm.provider` 这种深层路径，配置结构变了只改 service。
+  - `scripts/start_dashboard.py` 把 `streamlit run` 包起来，顺带把配置文件路径通过环境变量传下去——Dashboard 和 MCP server 用同一份配置，不然两边显示的东西会对不上。
 
 ### G2：DocumentManager 实现
 - **目标**：实现 `src/ingestion/document_manager.py`：跨存储的文档生命周期管理（list/delete/stats）。
@@ -3224,6 +3284,11 @@ dashboard:
   - `delete_document` 协调删除 Chroma + BM25 + ImageStorage + FileIntegrity 四个存储
   - 删除后再次 list 不包含已删除文档
 - **测试方法**：`pytest -q tests/unit/test_document_manager.py`。
+- **实现说明**：
+  - 文档的身份是 `source_path` 的 sha256 前 8 位（doc_id）。四个存储都用它做关联键，删除时按这个键扇出到四处；用一个贯穿的键，才不会出现删了向量库还留着 BM25 索引的半删状态。
+  - 删除是"尽力而为"而不是全有全无：某一处存储失败就记下来，其余照常删，最后把失败的部分放进返回值。半删状态必须让人看见，不能悄悄吞掉。
+  - `list_documents` 把多个来源合成一张表：chunk 数来自向量库，图片数来自图片索引，摄入时间来自完整性记录。单个来源读失败时那一列留空，不影响其余列。
+  - `DocumentManager` 只依赖四个存储的接口，不依赖具体实现——测试里用 fake 就能覆盖删除的扇出逻辑，不必起真的 Chroma。
 
 ### G3：数据浏览器页面
 - **目标**：实现 Dashboard 数据浏览器页面（查看文档列表、Chunk 详情、图片预览）。
@@ -3237,6 +3302,11 @@ dashboard:
   - `DataService`：封装 `ChromaStore.get_by_metadata()` 和 `ImageStorage.list_images()` 调用
 - **验收标准**：可在 Dashboard 中浏览已摄入的文档和 chunk 详情。
 - **测试方法**：手动验证（先 ingest 样例数据，再在 Dashboard 浏览）。
+- **实现说明**：
+  - 页面不直接调 Chroma，`DataService` 封装读取（`get_by_metadata` / `ImageStorage.list_images`）。换后端或者加缓存只改 service，页面代码不动。
+  - chunk 正文很长，默认折叠，点开才渲染。几百个 chunk 全文一次性塞进页面，浏览器会明显卡住。
+  - 集合筛选和当前选中的文档存在 `session_state` 里，翻页、重开折叠区都不会丢掉选择——Streamlit 每次交互都是重跑脚本，不存 session_state 就会闪回默认值。
+  - 页面读的是已经摄取好的数据，不触发摄取。浏览是只读操作。
 
 ### G4：Ingestion 管理页面
 - **目标**：实现 Dashboard Ingestion 管理页面（文件上传触发摄取、进度展示、文档删除）。
@@ -3249,6 +3319,11 @@ dashboard:
   - 文档删除：在文档列表中提供删除按钮，调用 `DocumentManager.delete_document()`
 - **验收标准**：可在 Dashboard 中上传文件触发摄取、看到实时进度条、删除已有文档。
 - **测试方法**：手动验证（上传 PDF → 观察进度 → 删除 → 确认已移除）。
+- **实现说明**：
+  - 上传的文件先落到临时目录，再交给 `IngestionPipeline`。这样走的是和 `scripts/ingest.py` 完全一样的摄取路径（完整性检查、去重、幂等入库都在里面），不会多出一套只在网页里能跑的逻辑。
+  - 进度条由 F5 的 `on_progress` 驱动，阶段名翻译成人话（加载 / 切分 / 转换 / 向量化 / 入库），向量化时另外显示批次进度。
+  - 删除走 `DocumentManager.delete_document`，删完立刻刷新列表——四个存储都删过才算删干净，界面上要能立刻看出文档没了。
+  - 集合名可以现填，默认取配置里的集合名。
 
 ### G5：Ingestion 追踪页面
 - **目标**：实现 Dashboard Ingestion 追踪页面（摄取历史列表、阶段耗时瀑布图）。
@@ -3262,6 +3337,11 @@ dashboard:
   - `TraceService`：读取 `logs/traces.jsonl`，解析为 Trace 对象列表
 - **验收标准**：执行 ingest 后，Dashboard 显示对应的追踪记录与耗时瀑布图。
 - **测试方法**：手动验证（先 ingest → 打开 Dashboard → 查看追踪）。
+- **实现说明**：
+  - `TraceService` 按行读 `logs/traces.jsonl` 并解析 JSON，坏行跳过而不是让整份文件读不出来。日志文件被写坏过一半时，页面还能显示其余的追踪。
+  - 追踪文件的路径跟着配置走（`observability.trace_file`）：配置里换了位置，页面也换，不用改代码。读不到配置时退回默认路径并记一条 warning。
+  - 瀑布图是横向条形图，每个阶段一条，长度就是 trace 里的 `elapsed_ms`——图上的数字和文件里的数字是同一个来源，不会对不上。
+  - 列表按时间倒序，最新的在最上面。
 
 ### G6：Query 追踪页面
 - **目标**：实现 Dashboard Query 追踪页面（查询历史、Dense/Sparse 对比、Rerank 变化）。
@@ -3273,6 +3353,11 @@ dashboard:
   - 详情页：耗时瀑布图 + Dense vs Sparse 并列对比 + Rerank 前后排名变化
 - **验收标准**：执行 query 后，Dashboard 显示查询追踪详情与各阶段对比。
 - **测试方法**：手动验证（先 query → 打开 Dashboard → 查看追踪）。
+- **实现说明**：
+  - Query 页复用 G5 的 `TraceService`，只按 `trace_type == "query"` 过滤。摄取和查询的追踪格式是同一套，解析逻辑不该写两遍。
+  - Dense vs Sparse 并列展示：两条路各自的 chunk 数和耗时放在一起看，才能判断"是向量那边弱"还是"是关键词那边弱"。只显示融合后的结果就看不出这个。
+  - Rerank 前后的排名变化从两个阶段各自的 `chunk_ids` 顺序对比出来，不额外存数据——顺序本来就在追踪里。
+  - 支持按问题关键词搜索：追踪文件是追加写的，条目会越积越多，能筛出关心的那一条比翻页实用。
 
 ---
 
@@ -3290,6 +3375,11 @@ dashboard:
   - 优雅降级：Ragas 未安装时抛出明确的 `ImportError` 提示
 - **验收标准**：mock LLM 环境下，`evaluate()` 返回包含 faithfulness/answer_relevancy 的 metrics 字典。
 - **测试方法**：`pytest -q tests/unit/test_ragas_evaluator.py`。
+- **实现说明**：
+  - Ragas 没装时给出明确的 `ImportError`（写清楚装哪个包），而不是让工厂在运行期抛一个 `ModuleNotFoundError`。用户看到"请安装 ragas"和看到"No module named 'ragas'"，处理方式完全不同。
+  - LLM 和 embedding 从 `Settings` 转成 Ragas 认识的对象，转换收在 `build_ragas_llm` / `build_ragas_embeddings` 两个函数里。Ragas 自己的 provider 名字和本项目的不一定对得上，差异只在这两处消化。
+  - 指标名统一成小写下划线（`faithfulness`、`answer_relevancy`、`context_precision`），和自定义评估器的命名一致，合并时才不会一个 `Faithfulness` 一个 `faithfulness`。
+  - Ragas 的返回对象在不同版本里形状会变，`_as_float` 把它们压成 float 再进 metrics，避免版本差异把整个报告搞坏。
 
 ### H2：CompositeEvaluator 实现
 - **目标**：实现 `composite_evaluator.py`：组合多个 Evaluator 并行执行，汇总结果。
@@ -3302,6 +3392,10 @@ dashboard:
   - 配置驱动：`evaluation.backends: [ragas, custom]` → 工厂自动组合
 - **验收标准**：配置两个 evaluator 时，返回的 metrics 包含两者的指标。
 - **测试方法**：`pytest -q tests/unit/test_composite_evaluator.py`。
+- **实现说明**：
+  - 组合器做的是"合并"，不是"编排"：各 evaluator 跑各自的，metrics 平铺合到一张表里。指标同名时后一个覆盖前一个并记一条 warning，不让冲突静悄悄地过去。
+  - 某个 evaluator 抛异常不影响其他的：这个后端没装或者 LLM 没配好，就当它没有指标，整体评估照常出结果。只有全部 evaluator 都失败才抛 `EvaluatorError`。
+  - 工厂按配置里的 `evaluation.backends` 列表自动组装，用户不用手写代码就能从"只有一个自定义评估器"切到"再加 Ragas"。
 
 ### H3：EvalRunner + Golden Test Set
 - **目标**：实现 `eval_runner.py`：读取 `tests/fixtures/golden_test_set.json`，跑 retrieval 并产出 metrics。
@@ -3328,6 +3422,11 @@ dashboard:
   ```
 - **验收标准**：`python scripts/evaluate.py` 可运行，输出 metrics。
 - **测试方法**：`pytest -q tests/integration/test_hybrid_search.py` 或 `python scripts/evaluate.py`。
+- **实现说明**：
+  - 黄金集是 `{"test_cases": [...]}`，每条给问题加期望的 chunk_id / source。`load_test_set` 容错：格式不对的条目跳过并记 warning，而不是整份文件读不了。
+  - 报告给的是 hit_rate 和 mrr 这类纯检索指标，不依赖 LLM 打分。没有 API key 也能跑——评估脚本是给 CI 和回归用的，不能绑死在需要付费的模型上。
+  - 脚本默认读 `tests/fixtures/golden_test_set.json`，`--test-set` 可以换成自己的集合，`--no-search` 只算不检索（拿来对比两次运行的指标）。
+  - 每条查询的结果都留在报告里（命中了哪些 chunk、排第几），不只给一个平均分——平均分掉下来时，得能看出是哪条查询掉的。
 
 ### H4：评估面板页面
 - **目标**：实现 Dashboard 评估面板页面（运行评估、查看指标、历史对比）。
@@ -3340,6 +3439,11 @@ dashboard:
   - 可选：历史评估结果对比图
 - **验收标准**：可在 Dashboard 中运行评估并查看指标。
 - **测试方法**：手动验证。
+- **实现说明**：
+  - 面板复用 `EvalRunner`，不另写一套评估逻辑。命令行和页面看到的是同一份指标，两边对不上就说明有一边算错了。
+  - 运行评估放在按钮后面：评估要跑一遍检索，很贵，页面每次刷新都重跑一次没人受得了。
+  - 指标来自评估器返回的那张表：检索指标（hit_rate、mrr）一定有，Ragas 那些 LLM 指标只有装了依赖、配了 key 才会出现在同一张表里。缺的那块就是不显示，而不是填 0 让人以为模型效果差。
+  - 跑完的结果写到 `reports/evaluation.json`，页面上的"The last result"读的就是它。两次跑出来的数字能对比，才看得出改动有没有效果。
 
 ### H5：Recall 回归测试（E2E）
 - **目标**：实现 `tests/e2e/test_recall.py`：基于 golden set 做最小召回阈值（例如 hit@k）。
@@ -3349,6 +3453,11 @@ dashboard:
   - `tests/fixtures/golden_test_set.json`（补齐若干条）
 - **验收标准**：hit@k 达到阈值（阈值写死在测试里，便于回归）。
 - **测试方法**：`pytest -q tests/e2e/test_recall.py`。
+- **实现说明**：
+  - 回归测试自带一份固定语料（测试文件里现写的几段文档）和一份黄金集，两者都在仓库里，不依赖 `docs/` 或任何外部数据。语料变了、检索逻辑变了，测试立刻红。
+  - embedding 用本地 stub server 顶替真实模型，测试不联网、不需要 key，在 CI 上能稳定跑。
+  - 阈值写死在测试里（hit_rate = 1.0、mrr ≥ 0.8），针对的是"能挡住明显退化"而不是刷一个好看的数字：语料固定、查询固定，命中就该是满分。
+  - 报告的形状也被断言（每条查询的命中情况和排名都在），报告结构被改坏时测试会直接发现，而不是等到看指标的时候才发现数字不见了。
 
 ---
 
@@ -3360,6 +3469,11 @@ dashboard:
   - `tests/e2e/test_mcp_client.py`
 - **验收标准**：完整走通 query_knowledge_hub 并返回 citations。
 - **测试方法**：`pytest -q tests/e2e/test_mcp_client.py`。
+- **实现说明**：
+  - 测试以子进程真的把 server 跑起来，测试代码自己扮演客户端：写 JSON-RPC 行、读 JSON-RPC 行。这样测的是"客户端真正看到的东西"，而不是直接调 Python 函数绕过了协议层。
+  - 握手按规范走：`initialize` → `notifications/initialized` → `tools/list` → `tools/call`。通知（没有 id 的消息）不回复响应，客户端不能等它的回包。
+  - plain 和 sdk 两种模式都测。两种模式的行为差别（错误码的收敛方式）正是 E1 里保留 plain 模式的理由，得有人盯着。
+  - 引用是重点断言的对象：答案里的 `[1]`、`[2]` 标注和 `structuredContent` 里的 citations 必须一一对应——标注和引用对不上，agent 就会指着一个不存在的来源。
 
 ### I2：E2E：Dashboard 冒烟测试
 - **目标**：验证 Dashboard 各页面在有数据时可正常渲染、无 Python 异常。
@@ -3370,6 +3484,11 @@ dashboard:
   - 验证 6 个页面均可加载、不抛异常
 - **验收标准**：所有页面冒烟测试通过。
 - **测试方法**：`pytest -q tests/e2e/test_dashboard_smoke.py`。
+- **实现说明**：
+  - 用 Streamlit 1.67 的 `AppTest` 跑页面：`from_string` 载入页面脚本然后断言 `at.exception` 为空。这里用 `from_string` 而不是 `from_function`——后者会把模块的全局变量弄丢，页面里 `from ... import ...` 的东西全都 NameError。
+  - 每个页面一个测试用例：六个页面分开断言，某一页挂了能一眼看出是哪一页，不用去翻一大堆输出找第一个异常。
+  - 冒烟测试用临时目录里的配置（trace 文件也指到临时路径），不会污染开发者本地的 `logs/` 和 `data/`。测试之间互不影响，可以并行跑。
+  - 断言的是"不抛异常 + 关键元素在"，不是像素级比对：页面文案会改，冒烟测试不该跟着天天红。
 
 ### I3：完善 README（运行说明 + 测试说明 + MCP 配置 + Dashboard 使用）
 - **目标**：让新用户能在 10 分钟内跑通 ingest + query + dashboard + tests，并能在 Copilot/Claude 中使用。
@@ -3383,6 +3502,11 @@ dashboard:
   - **运行测试**：单元测试、集成测试、E2E 测试命令
   - **常见问题**：API Key 配置、依赖安装、连接问题排查
 - **测试方法**：按 README 手动走一遍。
+- **实现说明**：
+  - README 按"新用户第一次来"的顺序排：克隆 → 配环境 → 跑第一次摄取和查询 → 接进 Copilot/Claude → 开 Dashboard → 跑测试。顺序就是实际使用顺序，照着做能一路读下来。
+  - MCP 配置示例直接给可粘贴的 JSON（Copilot 的 `mcp.json`、Claude Desktop 的 `claude_desktop_config.json`、Cursor / Claude Code），路径用占位符标出要换成自己的绝对路径。Windows 上路径里的反斜杠在 JSON 里要转义，示例里已经写对了。
+  - 常见问题先写最容易踩的：venv 里没有 pip（要用 `uv pip`）、相对路径按仓库根目录解析、API key 没配时哪些功能会降级。
+  - 特别标了一条：`scripts/evaluate.py` 跑的是仓库自带的黄金集，它绑定在固定语料上，在你自己的文档上命中会是 0——这不是 bug，脚本支持 `--test-set` 换成自己的集合。
 
 ### I4：清理接口一致性（契约测试补齐）
 - **目标**：为关键抽象（VectorStore / Reranker / Evaluator / DocumentManager）补齐契约测试。
@@ -3392,6 +3516,11 @@ dashboard:
   - `tests/unit/test_custom_evaluator.py`（补齐边界）
 - **验收标准**：`pytest -q` 全绿，且 contract tests 覆盖主要输入输出形状。
 - **测试方法**：`pytest -q`。
+- **实现说明**：
+  - 契约测试放在 `tests/contract/vector_store_contract.py`，被两处继承：单元测试里的 fake 和集成测试里的真 Chroma。fake 满足契约才能在单元测试里代表真实实现，真实实现跑同一套检查——两边被同一把尺子量。
+  - 契约管的是"输入输出的形状"而不是业务结果：返回值是不是该有的类型、字段在不在、非法输入会不会被拒。业务结果由各自的测试管。
+  - 这次补上了 `list_collections` 的契约（名字、数量、空集合三种情况）。补契约的顺序跟着功能走：新加的接口不补契约，下次换后端就会静悄悄地坏掉。
+  - 补契约要连 fake 一起改：只改真实现不改 fake，单元测试会替真实现说谎，契约也就白写了。
 
 ### I5：全链路 E2E 验收
 - **目标**：执行完整的端到端验收流程：ingest → query via MCP → Dashboard 可视化 → evaluate。
@@ -3402,6 +3531,11 @@ dashboard:
   - Dashboard 可展示摄取与查询追踪
   - `python scripts/evaluate.py` 输出评估指标
 - **测试方法**：手动全链路走通 + `pytest -q` 全量测试。
+- **实现说明**：
+  - 验收不是"看一眼没报错"，而是把整条链真跑一遍：真实摄取（Chroma + BM25 落到临时目录）→ 真实 MCP 子进程调用 → 真实 Dashboard 渲染（AppTest）→ 两次评估对比。哪一段是纸面上的，跑到就知道。
+  - embedding 用本地 stub server 顶替，产物全部落在临时目录：验收不需要 key、不联网，也不污染仓库里的 `data/` 和 `logs/`。
+  - 这一步抓出了三个真问题：`list_collections` 摄取完仍然报"没有集合"（索引那侧没接上）、MCP 查询的追踪里既没有问句也没有 rerank 阶段（工具没把 trace 传下去）、README 没说明黄金集是绑在固定语料上的。三个都已修掉。
+  - 验收脚本本身不进仓库（它是一次性的手工验收），留在仓库里的是它带来的修复和对应的测试——每次都能自动跑的那种。
 
 ---
 
