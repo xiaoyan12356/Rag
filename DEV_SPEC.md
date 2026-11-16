@@ -1990,9 +1990,9 @@ dashboard:
 | C8 | DenseEncoder | [x] | 2026-11-16 | DenseEncoder(批量送入 BaseEmbedding + 空文本补零向量 + 顺序/维度一致) + 14 个单元测试 |
 | C9 | SparseEncoder | [x] | 2026-11-16 | SparseEncoder(jieba 分词 + term_frequencies/doc_length/unique_terms + 语料统计) + 20 个单元测试 |
 | C10 | BatchProcessor | [x] | 2026-11-16 | BatchProcessor(分批驱动 dense/sparse + 单批失败不阻塞后续 + 批次耗时写 trace) + 13 个单元测试 |
-| C11 | BM25Indexer（倒排索引+IDF计算） | [ ] | | |
-| C12 | VectorUpserter（幂等upsert） | [ ] | | |
-| C13 | ImageStorage（图片存储+SQLite索引） | [ ] | | |
+| C11 | BM25Indexer（倒排索引+IDF计算） | [x] | 2026-11-16 | BM25Indexer(倒排索引 + IDF + JSON 持久化 + 增量更新/重建 + 查询) + 33 个单元测试 |
+| C12 | VectorUpserter（幂等upsert） | [x] | 2026-11-16 | VectorUpserter(确定性 chunk_id + 幂等 upsert + 批量写入) + 21 个单元测试 |
+| C13 | ImageStorage（图片存储+SQLite索引） | [x] | 2026-11-16 | ImageStorage(图片落盘 + SQLite 映射表 + WAL + 幂等覆盖) + 25 个单元测试 |
 | C14 | Pipeline 编排（MVP 串起来） | [ ] | | |
 | C15 | 脚本入口 ingest.py | [ ] | | |
 
@@ -2068,14 +2068,14 @@ dashboard:
 |------|---------|--------|------|
 | 阶段 A | 3 | 3 | 100% |
 | 阶段 B | 16 | 16 | 100% |
-| 阶段 C | 15 | 10 | 67% |
+| 阶段 C | 15 | 13 | 87% |
 | 阶段 D | 7 | 0 | 0% |
 | 阶段 E | 6 | 0 | 0% |
 | 阶段 F | 5 | 0 | 0% |
 | 阶段 G | 6 | 0 | 0% |
 | 阶段 H | 5 | 0 | 0% |
 | 阶段 I | 5 | 0 | 0% |
-| **总计** | **68** | **29** | **43%** |
+| **总计** | **68** | **32** | **47%** |
 
 
 ---
@@ -2757,6 +2757,13 @@ dashboard:
   - 支持索引重建与增量更新
 - **测试方法**：`pytest -q tests/unit/test_bm25_indexer_roundtrip.py`。
 - **备注**：本任务完成Sparse路径的最后一环，为D3 (SparseRetriever) 提供可查询的BM25索引。
+- **实现说明**：
+  - `BM25Indexer(index_dir, k1=1.5, b=0.75)`：接收 SparseEncoder 的 term statistics，输出 `{term: {idf, df, postings}}` 倒排索引。
+  - IDF 按规范公式计算：`log((N - df + 0.5) / (df + 0.5))`（未加 +1 修正，因此出现在半数以上文档中的词 IDF 为负——这是规范指定的公式，测试用已知语料逐值比对）。
+  - 索引按 collection 存为 `data/db/bm25/{collection}_bm25.json`，经临时文件再 rename 落盘，中途失败不会破坏上一次的索引。
+  - `build / load / save / query / rebuild / add_documents / remove_document` 覆盖全量与增量两条路径；`add_documents(doc_id=...)` 会先移除该文档的旧 chunk 再写入，重复摄取同一文档不会留下两份。
+  - 查询返回 `[{chunk_id, score}]`，分数相同时按 chunk_id 排序，保证结果稳定可复现。
+  - 单元测试 33 个（`tests/unit/test_bm25_indexer_roundtrip.py`）。
 
 ### C12：VectorUpserter（向量存储与幂等性保证）
 - **目标**：实现 `vector_upserter.py`：接收 DenseEncoder 的向量输出，生成稳定的 `chunk_id`，并调用 VectorStore 进行幂等写入。
@@ -2773,6 +2780,13 @@ dashboard:
   - 支持批量 upsert 且保持顺序
 - **测试方法**：`pytest -q tests/unit/test_vector_upserter_idempotency.py`。
 - **备注**：本任务完成Dense路径的最后一环，为D2 (DenseRetriever) 提供可查询的向量数据库。
+- **实现说明**：
+  - `VectorUpserter(settings, collection_name, vector_store)`：把 chunk 与其向量交给 `BaseVectorStore.upsert()` 写入；store 可注入，测试因此无需真实数据库。
+  - 确定性 chunk_id：`{source_path 的 SHA256 前 8 位}_{chunk_index:04d}_{文本 SHA256 前 8 位}`——同一 chunk 每次得到同一个 id（幂等），文本一变 id 就变。
+  - 记录写入 `metadata` 时带上 chunk 原文与 `chunk_id`，检索结果可回溯到文本。
+  - `upsert_batch()` 接受多批 (chunks, vectors)，按顺序写一次并按顺序返回所有 id。
+  - chunk 数量与向量数量不一致、chunk 缺少 `source_path`/`chunk_index` 抛 `ValueError`；写入失败包装为 `RuntimeError` 并保留原因。
+  - 单元测试 21 个（`tests/unit/test_vector_upserter_idempotency.py`）。
 
 ### C13：ImageStorage（图片文件存储与索引表契约）
 - **目标**：实现 `image_storage.py`：保存图片到 `data/images/{collection}/`，并使用 **SQLite** 记录 image_id→path 映射。
@@ -2798,6 +2812,13 @@ dashboard:
   - 提供并发安全访问（WAL 模式）
   - 支持按 collection 批量查询
 - **测试方法**：`pytest -q tests/unit/test_image_storage.py`。
+- **实现说明**：
+  - `ImageStorage(db_path, images_root)`：图片落到 `data/images/{collection}/`，映射关系存在 SQLite（`data/db/image_index.db`）。
+  - 表结构按规范建立：`image_index(image_id 主键, file_path, collection, doc_hash, page_num, created_at)`，并对 collection 与 doc_hash 建索引。
+  - 数据库以 WAL 模式打开，读取不阻塞写入，两个摄取进程可同时工作。
+  - `save_image()` 收字节或文件路径并复制/写入；`register_image()` 只登记已在磁盘上的图片（loader 已经把图放好时用这个）。两者都按 image_id 覆盖，重复摄取同一文档只留一张图、一条记录。
+  - `list_images(collection=/doc_hash=)` 按创建时间排序；`delete_image()` 可连同文件一起删；`get_collection_stats()` 统计图片数量与占用空间。
+  - 单元测试 25 个（`tests/unit/test_image_storage.py`）。
 
 ### C14：Pipeline 编排（MVP 串起来）
 - **目标**：实现 `pipeline.py`：串行执行（integrity→load→split→transform→encode→store），并对失败步骤做清晰异常。
@@ -2805,11 +2826,9 @@ dashboard:
   - `src/ingestion/pipeline.py`
   - `tests/integration/test_ingestion_pipeline.py`
 - **测试数据**：
-  - **主测试文档**：`tests/fixtures/sample_documents/complex_technical_doc.pdf`
-    - 8章节技术文档（~21KB）
-    - 包含3张嵌入图片（需测试图片提取和描述）
-    - 包含5个表格（测试表格内容解析）
+  - **主测试文档**：测试运行时由 PyMuPDF 生成（3 页、每页一图的多章节技术文档），仓库中不保留二进制 PDF
     - 多页多段落（测试完整分块流程）
+    - 每页一张嵌入图片（测试图片提取、落盘与索引）
   - **辅助测试**：`tests/fixtures/sample_documents/simple.pdf`（简单场景回归）
 - **验收标准**：
   - 对 `complex_technical_doc.pdf` 跑完整 pipeline，成功输出：

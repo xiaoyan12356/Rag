@@ -1,1 +1,7 @@
 """Storage module: vector upsert, BM25 index and image storage."""
+
+from ingestion.storage.bm25_indexer import BM25Indexer
+from ingestion.storage.image_storage import ImageStorage
+from ingestion.storage.vector_upserter import VectorUpserter
+
+__all__ = ["BM25Indexer", "ImageStorage", "VectorUpserter"]
