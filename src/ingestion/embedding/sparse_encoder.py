@@ -8,25 +8,14 @@ which is what BM25 later turns into an index.
 from __future__ import annotations
 
 import logging
-import re
 from collections import Counter
 from typing import Any
 
-import jieba
-
+from core.query_engine.tokenizer import DEFAULT_MIN_TERM_LENGTH, tokenize
 from core.trace.trace_context import TraceContext
 from core.types import Chunk
 
 logger = logging.getLogger(__name__)
-
-# jieba reports the dictionary it builds on the first call, which is noise in
-# the logs of a pipeline that is only counting words.
-jieba.setLogLevel(logging.WARNING)
-
-# A token that holds nothing but punctuation and spaces is not a term.
-_PUNCTUATION_ONLY = re.compile(r"[\s\W]+", re.UNICODE)
-
-DEFAULT_MIN_TERM_LENGTH = 2
 
 
 class SparseEncoder:
@@ -108,16 +97,8 @@ class SparseEncoder:
         The text is cut the same way the question is cut at search time, so
         that the words of a question can be looked up in the index.
         """
-        if not text or not text.strip():
-            return []
-
-        terms: list[str] = []
-        for token in jieba.lcut(text):
-            token = token.strip()
-            if not token or _PUNCTUATION_ONLY.fullmatch(token):
-                continue
-            if self.lowercase:
-                token = token.lower()
-            if len(token) >= self.min_term_length:
-                terms.append(token)
-        return terms
+        return tokenize(
+            text,
+            min_term_length=self.min_term_length,
+            lowercase=self.lowercase,
+        )
