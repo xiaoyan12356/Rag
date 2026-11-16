@@ -2000,13 +2000,13 @@ dashboard:
 
 | 任务编号 | 任务名称 | 状态 | 完成日期 | 备注 |
 |---------|---------|------|---------|------|
-| D1 | QueryProcessor（关键词提取 + filters） | [ ] | | |
-| D2 | DenseRetriever（调用 VectorStore.query） | [ ] | | |
-| D3 | SparseRetriever（BM25 查询） | [ ] | | |
-| D4 | RRF Fusion | [ ] | | |
-| D5 | HybridSearch 编排 | [ ] | | |
-| D6 | Reranker（Core 层编排 + Fallback） | [ ] | | |
-| D7 | 脚本入口 query.py（查询可用） | [ ] | | |
+| D1 | QueryProcessor（关键词提取 + filters） | [x] | 2026-11-16 | QueryProcessor(jieba 分词 + 停用词 + max_keywords 截断 + key:value 过滤解析) + 28 个单元测试 |
+| D2 | DenseRetriever（调用 VectorStore.query） | [x] | 2026-11-16 | DenseRetriever(query → embed → store.query → RetrievalResult) + 19 个单元测试 |
+| D3 | SparseRetriever（BM25 查询） | [x] | 2026-11-16 | SparseRetriever(BM25 索引查询 + get_by_ids 回查文本 + 缺失 chunk 跳过) + 17 个单元测试 |
+| D4 | RRF Fusion | [x] | 2026-11-16 | RRFFusion(k=60 可配 + 1/(k+place) 求和 + chunk_id 稳定排序 + rank 编号) + 21 个单元测试 |
+| D5 | HybridSearch 编排 | [x] | 2026-11-16 | HybridSearch(双路并行 + RRF 融合 + 元数据后置过滤 + 单路失败降级) + 19 个集成测试 |
+| D6 | Reranker（Core 层编排 + Fallback） | [x] | 2026-11-16 | Reranker(编排 libs.reranker 后端 + 失败保留原序 + fallback_used 标记) + 20 个单元测试 |
+| D7 | 脚本入口 query.py（查询可用） | [x] | 2026-11-16 | scripts/query.py(--query/--top-k/--collection/--verbose/--no-rerank + 分级退出码) + 9 个端到端测试 |
 
 #### 阶段 E：MCP Server 层与 Tools
 
@@ -2069,13 +2069,13 @@ dashboard:
 | 阶段 A | 3 | 3 | 100% |
 | 阶段 B | 16 | 16 | 100% |
 | 阶段 C | 15 | 15 | 100% |
-| 阶段 D | 7 | 0 | 0% |
+| 阶段 D | 7 | 7 | 100% |
 | 阶段 E | 6 | 0 | 0% |
 | 阶段 F | 5 | 0 | 0% |
 | 阶段 G | 6 | 0 | 0% |
 | 阶段 H | 5 | 0 | 0% |
 | 阶段 I | 5 | 0 | 0% |
-| **总计** | **68** | **34** | **50%** |
+| **总计** | **68** | **41** | **60%** |
 
 
 ---
@@ -2875,6 +2875,12 @@ dashboard:
   - `tests/unit/test_query_processor.py`
 - **验收标准**：对输入 query 输出 `keywords` 非空（可根据停用词策略），filters 为 dict。
 - **测试方法**：`pytest -q tests/unit/test_query_processor.py`。
+- **实现说明**：
+  - `QueryProcessor(stopwords, min_term_length, max_keywords, filter_keys)`：把问题切成检索需要的词，并读出问题里带的过滤条件。
+  - 分词与索引侧共用同一个 `core/query_engine/tokenizer.py`（jieba），摄取时切词和检索时切词口径一致，问题的词才查得到索引里的词。
+  - 停用词表同时覆盖中英文；一个问题切完只剩停用词时退回原词，不让查询变成空。
+  - 过滤条件写成 `key:value`（值可带引号），只认白名单里的 key；调用方传入的过滤条件优先级更高，不会被问题里的同名条件覆盖。
+  - 单元测试 28 个（`tests/unit/test_query_processor.py`）。
 
 ### D2：DenseRetriever（调用 VectorStore.query）
 - **目标**：实现 `dense_retriever.py`，组合 `EmbeddingClient`（query 向量化）+ `VectorStore`（向量检索），完成语义召回。
@@ -2898,6 +2904,12 @@ dashboard:
   - 返回结果包含 `chunk_id`、`score`、`text`、`metadata`
   - mock EmbeddingClient 和 VectorStore 时能正确编排调用
 - **测试方法**：`pytest -q tests/unit/test_dense_retriever.py`（mock embedding + vector store）。
+- **实现说明**：
+  - `core/types.py` 新增 `RetrievalResult`：chunk_id / score / text / metadata，外加 dense_score / sparse_score / rank，让一个结果在融合之后仍能说清是哪一路找到的。
+  - `DenseRetriever(settings, embedding_client?, vector_store?, collection?)`：embedding 与 vector store 都能注入，因此不需要网络和数据库就能测。
+  - 流程是 question → embed → store.query → 归一化成 `RetrievalResult`；向量库没给 text 时退回 metadata 里的 text。
+  - 空问题、非字符串问题、top_k ≤ 0 一律 `ValueError`；provider 没返回向量报 `RuntimeError`。
+  - 单元测试 19 个（`tests/unit/test_dense_retriever.py`）。
 
 ### D3：SparseRetriever（BM25 查询）
 - **目标**：实现 `sparse_retriever.py`：从 `data/db/bm25/` 载入索引并查询。
@@ -2922,6 +2934,12 @@ dashboard:
   - 对已构建索引的 fixtures 语料，关键词检索命中预期 chunk_id
   - 返回结果包含完整的 text 和 metadata
 - **测试方法**：`pytest -q tests/unit/test_sparse_retriever.py`。
+- **实现说明**：
+  - `SparseRetriever(settings, bm25_indexer?, vector_store?, collection?)`：BM25 索引与向量库都能注入，测试不用落盘。
+  - 流程是 keywords → BM25 查询 → 拿到 chunk_id → `get_by_ids` 回查文本与 metadata → 组装 `RetrievalResult`。
+  - 索引只从磁盘读一次，第二次检索不再重复读。
+  - 索引里有、向量库里没有的 chunk 会被跳过：查得到不等于拿得到内容。
+  - 单元测试 17 个（`tests/unit/test_sparse_retriever.py`）。
 
 ### D4：Fusion（RRF 实现）
 - **目标**：实现 `fusion.py`：RRF 融合 dense/sparse 排名并输出统一排序。
@@ -2930,6 +2948,12 @@ dashboard:
   - `tests/unit/test_fusion_rrf.py`
 - **验收标准**：对构造的排名输入输出 deterministic；k 参数可配置。
 - **测试方法**：`pytest -q tests/unit/test_fusion_rrf.py`。
+- **实现说明**：
+  - `RRFFusion(k=60)`：score = Σ 1/(k + place)，place 从 1 开始；k 可配，k 越大排名越平。
+  - 两路的分数不在一个量纲上（余弦距离 vs BM25），所以融合看的是名次不是分数；每一路自己的分数仍保留在 dense_score / sparse_score 里。
+  - 排序用 `(-score, chunk_id)`，同分时按 chunk_id 决胜，同一份输入永远得到同一份输出。
+  - 融合不修改传入的结果对象，原列表顺序保持不变。
+  - 单元测试 21 个（`tests/unit/test_fusion_rrf.py`）。
 
 ### D5：HybridSearch 编排
 - **目标**：实现 `hybrid_search.py`：编排 Dense + Sparse + Fusion 的完整混合检索流程，并集成 Metadata 过滤逻辑。
@@ -2947,6 +2971,13 @@ dashboard:
   - 支持 filters 参数（如 `collection`、`doc_type`）进行过滤
   - Dense/Sparse 任一路径失败时能降级到单路结果
 - **测试方法**：`pytest -q tests/integration/test_hybrid_search.py`。
+- **实现说明**：
+  - `HybridSearch(settings, query_processor?, dense_retriever?, sparse_retriever?, fusion?, collection?)`：四个部件都能注入。
+  - 流程是 process → 双路并行 → RRF 融合 → 元数据后置过滤 → Top-K；双路并行是因为 dense 等 provider、sparse 读本地索引，两者互不阻塞。
+  - 元数据过滤在向量库侧做一次，融合后再兜一次：稀疏路不知道 metadata，只能靠后置过滤补上。
+  - `collection` 不是 metadata 字段而是检索范围，单独判断；问题里要的集合和当前集合不一致时直接返回空，而不是把结果全过滤掉。
+  - 任一路失败降级到另一路的结果；两路都失败才报错。
+  - 集成测试 19 个（`tests/integration/test_hybrid_search.py`）：真 Chroma 集合 + 真 BM25 索引，只把 embedding provider 换成假的。
 
 ### D6：Reranker（Core 层编排 + fallback）
 - **目标**：实现 `core/query_engine/reranker.py`：接入 `libs.reranker` 后端，失败/超时回退 fusion 排名。
@@ -2956,6 +2987,13 @@ dashboard:
   - `tests/unit/test_reranker_fallback.py`
 - **验收标准**：模拟后端异常时不影响最终返回，且标记 fallback=true。
 - **测试方法**：`pytest -q tests/unit/test_reranker_fallback.py`。
+- **实现说明**：
+  - `core/query_engine/reranker.py` 的 `Reranker(settings, reranker?)` 只做编排，具体怎么评判交给 `libs/reranker` 的后端。
+  - 后端抛异常时保留融合给出的原顺序，并把 `fallback_used` 置为 True：模型不可用不该让答案变空。
+  - 后端自己吞掉异常并保持原序时（`fallback_used` 已为 True），编排层同样标记为回退，不把"没排序成功"说成"排序成功"。
+  - 后端漏掉的候选不会被丢，回到列表末尾。
+  - 结果内容、metadata、融合分数都保持原样，只改顺序和 rank。
+  - 单元测试 20 个（`tests/unit/test_reranker_fallback.py`）。
 
 ### D7：脚本入口 query.py（查询可用）
 - **目标**：实现 `scripts/query.py`，作为在线查询的命令行入口，调用完整的 HybridSearch + Reranker 流程并输出检索结果。
@@ -2985,6 +3023,12 @@ dashboard:
   - `--verbose` 模式显示各阶段中间结果（便于调试）
   - 无数据时返回友好提示（如"未找到相关文档，请先运行 ingest.py 摄取数据"）
 - **测试方法**：手动运行 `python scripts/query.py --query "测试查询" --verbose`（依赖已摄取的数据）。
+- **实现说明**：
+  - `scripts/query.py`：命令行入口，支持 `--query`、`--top-k`、`--collection`、`--verbose`、`--no-rerank`、`--config`。
+  - 默认模式打印序号、score、来源文件与正文摘要；`--verbose` 额外打印 dense / sparse / fusion 三路各自的结果。
+  - 退出码分级：搜到结果 0，没搜到 1，搜不了 2；没搜到时提示先跑 `scripts/ingest.py`。
+  - 端到端测试以子进程真的跑这个脚本，先用 `scripts/ingest.py` 摄取样例文档再查询；embedding provider 用本地 stub server 顶替，因此不需要密钥和网络，产物都落在临时目录。
+  - 端到端测试 9 个（`tests/e2e/test_query_script.py`）。
 - **与 MCP Tool 的关系**：
   - `scripts/query.py` 是开发调试用的命令行工具
   - `E3 query_knowledge_hub` 是生产环境的 MCP Tool
