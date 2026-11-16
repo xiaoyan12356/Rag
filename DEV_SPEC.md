@@ -1983,7 +1983,7 @@ dashboard:
 | C1 | 定义核心数据类型/契约（Document/Chunk/ChunkRecord） | [x] | 2026-11-16 | core/types.py 的 Document/Chunk/ChunkRecord + 图片占位符与 ImageRef 校验 + 38 个单元测试 |
 | C2 | 文件完整性检查（SHA256） | [x] | 2026-11-16 | FileIntegrityChecker 抽象接口 + SQLiteIntegrityChecker(WAL) + 增量跳过判定 + 36 个单元测试 |
 | C3 | Loader 抽象基类与 PDF Loader | [x] | 2026-11-16 | BaseLoader/LoaderError + PdfLoader(MarkItDown 文本 + PyMuPDF 图片提取与占位符) + with_images.pdf 样例 + 40 个单元测试 |
-| C4 | Splitter 集成（调用 Libs） | [ ] | | |
+| C4 | Splitter 集成（调用 Libs） | [x] | 2026-11-16 | DocumentChunker 适配器(稳定 chunk id + 元数据继承 + 图片按需分发) + 27 个单元测试 |
 | C5 | Transform 基类 + ChunkRefiner | [ ] | | |
 | C6 | MetadataEnricher | [ ] | | |
 | C7 | ImageCaptioner | [ ] | | |
@@ -2068,14 +2068,14 @@ dashboard:
 |------|---------|--------|------|
 | 阶段 A | 3 | 3 | 100% |
 | 阶段 B | 16 | 14 | 88% |
-| 阶段 C | 15 | 3 | 20% |
+| 阶段 C | 15 | 4 | 27% |
 | 阶段 D | 7 | 0 | 0% |
 | 阶段 E | 6 | 0 | 0% |
 | 阶段 F | 5 | 0 | 0% |
 | 阶段 G | 6 | 0 | 0% |
 | 阶段 H | 5 | 0 | 0% |
 | 阶段 I | 5 | 0 | 0% |
-| **总计** | **68** | **20** | **29%** |
+| **总计** | **68** | **21** | **31%** |
 
 
 ---
@@ -2542,6 +2542,14 @@ dashboard:
   - **溯源链接**：所有 Chunk.source_ref 正确指向父 Document.id
   - **类型契约**：输出的 Chunk 对象符合 `core/types.py` 中的 Chunk 定义（可序列化、字段完整）
 - **测试方法**：`pytest -q tests/unit/test_document_chunker.py`（使用 FakeSplitter 隔离测试，无需真实 LLM/外部依赖）。
+- **实现说明**：
+  - `libs.splitter` 只管 `str → List[str]`，`DocumentChunker` 是业务适配器 `Document → List[Chunk]`；两层职责不混，`libs` 侧保持纯工具。
+  - chunk id 格式 `{doc_id}_{index:04d}_{text_hash_8}`：文档 id + 序号 + 文本哈希。序号保证同文本的两块不会撞 id，哈希保证内容变了 id 就变，同一文档重复切分 id 序列完全一致（增量摄取靠这个认出"上次摄过的块"）。
+  - 元数据继承用 `document.metadata.copy()`，chunk 改自己的 metadata 不会回写到 document。
+  - **图片按需分发**是这一层最关键的业务逻辑：扫 chunk 文本里的 `[IMAGE: {id}]` 占位符，只把该 chunk 真正引用到的 ImageRef 写进 `chunk.metadata["images"]`，并把 id 列表写进 `chunk.metadata["image_refs"]`。整体继承会让 C7 ImageCaptioner 去描述这个 chunk 根本不涉及的图；整体丢弃则让它拿不到图片路径。
+  - 没有占位符的 chunk **不带** `images` 字段，但 `image_refs` 恒为 `[]`——下游据此判断"这个 chunk 没有图"而不是"字段缺失"。
+  - 占位符里的图片 id 不在文档的 images 列表里时（例如图片提取降级），`image_refs` 照样记录该 id，只是没有对应的 `images` 条目，信息不丢。
+  - splitter 由 `SplitterFactory` 按配置取，改 `settings.yaml` 的 `chunk_size`/`splitter` 即改变切分结果，代码里没有硬编码。
 
 ### C5：Transform 抽象基类 + ChunkRefiner（规则去噪 + LLM 增强）
 - **目标**：定义 `BaseTransform`；实现 `ChunkRefiner`：先做规则去噪，再通过LLM进行智能增强，并提供失败降级机制（LLM异常时回退到规则结果，不阻塞 ingestion）。
