@@ -74,7 +74,7 @@
 | C2 | 文件完整性检查（SHA256） | [x] | 2026-11-16 | FileIntegrityChecker 抽象接口 + SQLiteIntegrityChecker(WAL) + 增量跳过判定 + 36 个单元测试 |
 | C3 | Loader 抽象基类与 PDF Loader | [x] | 2026-11-16 | BaseLoader/LoaderError + PdfLoader(MarkItDown 文本 + PyMuPDF 图片提取与占位符) + with_images.pdf 样例 + 40 个单元测试 |
 | C4 | Splitter 集成（调用 Libs） | [x] | 2026-11-16 | DocumentChunker 适配器(稳定 chunk id + 元数据继承 + 图片按需分发) + 27 个单元测试 |
-| C5 | Transform 基类 + ChunkRefiner | [ ] | | |
+| C5 | Transform 基类 + ChunkRefiner | [x] | 2026-11-16 | BaseTransform 抽象契约 + TraceContext 最小实现 + ChunkRefiner(规则去噪 + LLM 增强 + 降级) + 49 个单元测试 + 7 个真实 LLM 集成测试 |
 | C6 | MetadataEnricher | [ ] | | |
 | C7 | ImageCaptioner | [ ] | | |
 | C8 | DenseEncoder | [ ] | | |
@@ -158,14 +158,14 @@
 |------|---------|--------|------|
 | 阶段 A | 3 | 3 | 100% |
 | 阶段 B | 16 | 14 | 88% |
-| 阶段 C | 15 | 4 | 27% |
+| 阶段 C | 15 | 5 | 33% |
 | 阶段 D | 7 | 0 | 0% |
 | 阶段 E | 6 | 0 | 0% |
 | 阶段 F | 5 | 0 | 0% |
 | 阶段 G | 6 | 0 | 0% |
 | 阶段 H | 5 | 0 | 0% |
 | 阶段 I | 5 | 0 | 0% |
-| **总计** | **68** | **21** | **31%** |
+| **总计** | **68** | **22** | **32%** |
 
 
 ---
@@ -715,6 +715,14 @@
     - 单元测试：验证代码逻辑正确
     - 集成测试：验证系统可用性
     - 两者互补，缺一不可
+- **实现说明**：
+  - `BaseTransform` 只定契约：`transform(chunks, trace) -> list[Chunk]`，并且明确"不能丢 chunk"——做不到更好就把原文还回去，后续 C6/C7 可以直接串成链。
+  - `core/trace/trace_context.py` 这次落地最小实现：uuid trace_id、按顺序记录 stage、`finish()` 与 `elapsed_ms()`；写入侧的 collector 留给 Phase F。
+  - `ChunkRefiner` 分两步：规则先去页眉页脚、HTML 注释/标签、分隔线、多余空白，再可选交给 LLM 重写成自包含单元；`config/prompts/chunk_refinement.txt` 已有 `{text}` 占位符，直接复用。
+  - 代码块在规则跑之前先被"挪开"、跑完再放回去，所以块里的缩进和空格不会被当成噪声压掉；`ocr_errors` 场景也刻意保留原样——数字与字母混淆只有模型能判断，规则不越权。
+  - 降级链是硬要求：LLM 不可达/返回空/prompt 缺 `{text}`/prompt 文件缺失，一律回退规则结果并写 `refined_by: "rule"` + `refine_fallback_reason: "llm_failed"`；单个 chunk 抛异常只影响它自己，其余 chunk 照常处理。
+  - `ingestion.chunk_refiner.use_llm` 是唯一开关，关掉时连模型都不会被构造（`LLMFactory.create` 延迟到第一次真正需要时）。
+  - 单元测试 49 个（`tests/unit/test_chunk_refiner.py`），fixture `tests/fixtures/noisy_chunks.json` 覆盖 8 种噪声场景；真实 LLM 集成测试 7 个（`tests/integration/test_chunk_refiner_llm.py`）——本机没有可用凭证（无 `OPENAI_API_KEY`、无本地 Ollama），因此集成测试全部 skip，待配置好 provider 后再跑一次验收。
 
 ### C6：MetadataEnricher（规则增强 + 可选 LLM 增强 + 降级）
 - **目标**：实现元数据增强模块：提供规则增强的默认实现，并重点支持 LLM 增强（配置已就绪，LLM 开关打开）。利用 LLM 对 chunk 进行高质量的 title 生成、summary 摘要和 tags 提取。同时保留失败降级机制，确保不阻塞 ingestion。
