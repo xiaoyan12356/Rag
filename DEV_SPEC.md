@@ -1973,8 +1973,8 @@ dashboard:
 | B7.6 | ChromaStore 默认实现 | [x] | 2026-11-15 | ChromaStore(PersistentClient) + 工厂注册 chroma + 共享契约套件实跑 23 个集成测试 |
 | B7.7 | LLM Reranker 实现 | [x] | 2026-11-15 | LLMReranker(读 config/prompts/rerank.txt) + 严格 JSON schema 校验 + 失败回退 + 23 个单元测试 |
 | B7.8 | Cross-Encoder Reranker 实现 | [x] | 2026-11-15 | CrossEncoderReranker(可注入 scorer) + 工厂注册 cross_encoder + 超时回退 + 17 个单元测试 |
-| B8 | Vision LLM 抽象接口与工厂集成 | [ ] | | |
-| B9 | Azure Vision LLM 实现 | [ ] | | |
+| B8 | Vision LLM 抽象接口与工厂集成 | [x] | 2026-11-16 | BaseVisionLLM(chat_with_image + prepare_image 预处理扩展点) + LLMFactory.create_vision_llm 独立注册表 + 24 个单元测试 |
+| B9 | Azure Vision LLM 实现 | [x] | 2026-11-16 | AzureVisionLLM(部署级 URL + api-key 认证 + inline data URL + 超限自动压缩) + pillow 依赖 + 23 个单元测试 |
 
 #### 阶段 C：Ingestion Pipeline MVP
 
@@ -2067,7 +2067,7 @@ dashboard:
 | 阶段 | 总任务数 | 已完成 | 进度 |
 |------|---------|--------|------|
 | 阶段 A | 3 | 3 | 100% |
-| 阶段 B | 16 | 14 | 88% |
+| 阶段 B | 16 | 16 | 100% |
 | 阶段 C | 15 | 6 | 40% |
 | 阶段 D | 7 | 0 | 0% |
 | 阶段 E | 6 | 0 | 0% |
@@ -2075,7 +2075,7 @@ dashboard:
 | 阶段 G | 6 | 0 | 0% |
 | 阶段 H | 5 | 0 | 0% |
 | 阶段 I | 5 | 0 | 0% |
-| **总计** | **68** | **23** | **34%** |
+| **总计** | **68** | **25** | **37%** |
 
 
 ---
@@ -2393,6 +2393,13 @@ dashboard:
   - 工厂方法 `create_vision_llm` 能根据配置路由到不同 provider（测试中用 Fake Vision LLM 验证）。
   - 接口设计支持图片预处理（压缩、格式转换）的扩展点。
 - **测试方法**：`pytest -q tests/unit/test_vision_llm_factory.py`。
+- **实现说明**：
+  - 视觉模型和文本模型是两种不同的东西，所以视觉 provider 走自己的注册表（`_vision_builders`），不复用文本那套——同一个名字在两边互不干扰。
+  - `BaseVisionLLM.chat_with_image(text, image_path, trace)` 接受路径、base64 字符串或原始 bytes，三种输入由 `prepare_image` 统一归一。
+  - `prepare_image` 就是留给实现方的图片预处理扩展点：基类只负责读文件/解 base64/猜 mime type，子类可以覆盖它来做压缩或格式转换，调用方不用管。
+  - mime type 靠 magic bytes 判断（PNG/JPEG/GIF/WEBP），不信任扩展名。
+  - `create_vision_llm` 不看 `vision_llm.enabled`——用不用视觉模型是调用方的决定，工厂只负责按名字路由；名字大小写不敏感，未知 provider 报 `VisionLLMError` 并列出已注册的 provider。
+  - 单元测试 24 个（`tests/unit/test_vision_llm_factory.py`），含"子类覆盖 prepare_image 即为压缩扩展点"的用例。
 
 ### B9：Azure Vision LLM 实现
 - **目标**：实现 `AzureVisionLLM`，支持通过 Azure OpenAI 调用 GPT-4o/GPT-4-Vision-Preview 进行图像理解。
@@ -2409,6 +2416,12 @@ dashboard:
   - API 调用失败时抛出清晰错误，包含 Azure 特有错误码。
   - mock 测试覆盖：正常调用、图片压缩、超时、认证失败等场景。
 - **测试方法**：`pytest -q tests/unit/test_azure_vision_llm.py`。
+- **实现说明**：
+  - Azure 用 deployment 级别的 URL（`/openai/deployments/{deployment}/chat/completions?api-version=...`）和 `api-key` 头认证，不用 `Authorization`。
+  - 图片以 inline data URL 的形式随请求带走，所以超过 `max_image_size` 的图在**发请求之前**就缩掉，而不是等 provider 拒绝；压缩交给 pillow（新增 `pillow>=10.0.0` 依赖），PNG 转 PNG、JPEG 转 JPEG，缩放用 LANCZOS。
+  - 错误信息里保留 Azure 的错误码（`describe_error` 会带出 code/message），因为错误码才是区分"订阅 key 错了"和"deployment 名错了"的依据；同时保证 api_key 不会出现在任何错误信息里。
+  - `azure_endpoint` 或 `deployment_name` 缺失时在构造阶段就报错，不等到请求时才失败。
+  - 单元测试 23 个（`tests/unit/test_azure_vision_llm.py`），全部走 `httpx.MockTransport`：正常调用、部署 URL 拼接、api-key 头、data URL 内容、压缩前后尺寸、超时/连接失败/401 三类错误、响应结构异常、工厂路由。
 
 ---
 
