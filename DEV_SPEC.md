@@ -1981,7 +1981,7 @@ dashboard:
 | 任务编号 | 任务名称 | 状态 | 完成日期 | 备注 |
 |---------|---------|------|---------|------|
 | C1 | 定义核心数据类型/契约（Document/Chunk/ChunkRecord） | [x] | 2026-11-16 | core/types.py 的 Document/Chunk/ChunkRecord + 图片占位符与 ImageRef 校验 + 38 个单元测试 |
-| C2 | 文件完整性检查（SHA256） | [ ] | | |
+| C2 | 文件完整性检查（SHA256） | [x] | 2026-11-16 | FileIntegrityChecker 抽象接口 + SQLiteIntegrityChecker(WAL) + 增量跳过判定 + 36 个单元测试 |
 | C3 | Loader 抽象基类与 PDF Loader | [ ] | | |
 | C4 | Splitter 集成（调用 Libs） | [ ] | | |
 | C5 | Transform 基类 + ChunkRefiner | [ ] | | |
@@ -2068,14 +2068,14 @@ dashboard:
 |------|---------|--------|------|
 | 阶段 A | 3 | 3 | 100% |
 | 阶段 B | 16 | 14 | 88% |
-| 阶段 C | 15 | 1 | 7% |
+| 阶段 C | 15 | 2 | 13% |
 | 阶段 D | 7 | 0 | 0% |
 | 阶段 E | 6 | 0 | 0% |
 | 阶段 F | 5 | 0 | 0% |
 | 阶段 G | 6 | 0 | 0% |
 | 阶段 H | 5 | 0 | 0% |
 | 阶段 I | 5 | 0 | 0% |
-| **总计** | **68** | **18** | **26%** |
+| **总计** | **68** | **19** | **28%** |
 
 
 ---
@@ -2469,6 +2469,14 @@ dashboard:
   - 数据库文件正确创建在 `data/db/ingestion_history.db`
   - 支持并发写入（SQLite WAL模式）
 - **测试方法**：`pytest -q tests/unit/test_file_integrity.py`。
+- **实现说明**：
+  - 用**内容哈希**而不是文件名识别文档：同一份文件换了路径仍能认出是"摄取过的那份"，改名不会导致重复摄取。
+  - `FileIntegrityChecker` 是抽象接口，`SQLiteIntegrityChecker` 只是默认实现——历史记录将来换成 Redis/PostgreSQL 时调用方不用改。
+  - 只有 `success` 才让 `should_skip` 返回 True：失败的文件下一轮会重试，失败原因仍留在表里备查。
+  - 同一个 hash 重复记录走 `ON CONFLICT DO UPDATE`，一个文件来回摄取多次也只留一行。
+  - 数据库开 WAL 模式并带 30 秒锁超时，读写不互相阻塞，两个摄取进程可以同时写；测试用 10 线程并发写验证。
+  - 大文件按 64KB 分块读，算哈希不用把整个文档读进内存。
+  - 数据库路径走 `resolve_path`，相对路径按仓库根目录解析，默认落在 `data/db/ingestion_history.db`（该目录在 .gitignore 中）。
 
 ### C3：Loader 抽象基类与 PDF Loader 壳子
 - **目标**：在Libs中定义 `BaseLoader`，并实现 `PdfLoader` 的最小行为。
