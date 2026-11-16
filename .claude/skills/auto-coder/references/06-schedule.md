@@ -77,9 +77,9 @@
 | C5 | Transform 基类 + ChunkRefiner | [x] | 2026-11-16 | BaseTransform 抽象契约 + TraceContext 最小实现 + ChunkRefiner(规则去噪 + LLM 增强 + 降级) + 49 个单元测试 + 7 个真实 LLM 集成测试 |
 | C6 | MetadataEnricher | [x] | 2026-11-16 | MetadataEnricher(规则 title/summary/tags + 可选 LLM JSON 提取 + 降级) + metadata_enrichment prompt + 39 个单元测试 + 6 个真实 LLM 集成测试 |
 | C7 | ImageCaptioner | [x] | 2026-11-16 | ImageCaptioner(按 image_refs 调 vision 模型写 caption + 失败降级标 has_unprocessed_images) + 28 个单元测试 |
-| C8 | DenseEncoder | [ ] | | |
-| C9 | SparseEncoder | [ ] | | |
-| C10 | BatchProcessor | [ ] | | |
+| C8 | DenseEncoder | [x] | 2026-11-16 | DenseEncoder(批量送入 BaseEmbedding + 空文本补零向量 + 顺序/维度一致) + 14 个单元测试 |
+| C9 | SparseEncoder | [x] | 2026-11-16 | SparseEncoder(jieba 分词 + term_frequencies/doc_length/unique_terms + 语料统计) + 20 个单元测试 |
+| C10 | BatchProcessor | [x] | 2026-11-16 | BatchProcessor(分批驱动 dense/sparse + 单批失败不阻塞后续 + 批次耗时写 trace) + 13 个单元测试 |
 | C11 | BM25Indexer（倒排索引+IDF计算） | [ ] | | |
 | C12 | VectorUpserter（幂等upsert） | [ ] | | |
 | C13 | ImageStorage（图片存储+SQLite索引） | [ ] | | |
@@ -158,14 +158,14 @@
 |------|---------|--------|------|
 | 阶段 A | 3 | 3 | 100% |
 | 阶段 B | 16 | 16 | 100% |
-| 阶段 C | 15 | 7 | 47% |
+| 阶段 C | 15 | 10 | 67% |
 | 阶段 D | 7 | 0 | 0% |
 | 阶段 E | 6 | 0 | 0% |
 | 阶段 F | 5 | 0 | 0% |
 | 阶段 G | 6 | 0 | 0% |
 | 阶段 H | 5 | 0 | 0% |
 | 阶段 I | 5 | 0 | 0% |
-| **总计** | **68** | **26** | **38%** |
+| **总计** | **68** | **29** | **43%** |
 
 
 ---
@@ -783,6 +783,13 @@
   - `tests/unit/test_dense_encoder.py`
 - **验收标准**：encoder 输出向量数量与 chunks 数量一致，维度一致。
 - **测试方法**：`pytest -q tests/unit/test_dense_encoder.py`。
+- **实现说明**：
+  - `DenseEncoder(embedding, batch_size=100)`：把 chunk 的文本按批送入 `BaseEmbedding.embed`，返回与 chunks 一一对应的向量列表，顺序不变。
+  - 空文本的 chunk 不送给 provider，改由零向量占位，保证向量与 chunk 始终对齐；零向量的宽度取自首个向量的宽度，无向量时回落到 `EmbeddingSettings.dimensions`。
+  - provider 返回的向量数量与文本数不符时抛 `RuntimeError`；各批向量宽度不一致时同样抛 `RuntimeError`，避免把错位的向量写进索引。
+  - `batch_size <= 0` 与空 chunk 列表分别抛 `ValueError`（属于调用方的编程错误，而非运行时故障）。
+  - trace 记录 `dense_encoder` 阶段：total_chunks / batch_count / dimension。
+  - 单元测试 14 个（`tests/unit/test_dense_encoder.py`）。
 
 ### C9：SparseEncoder（BM25 统计与输出契约）
 - **目标**：实现 `sparse_encoder.py`：对 chunks 建立 BM25 所需统计（可先仅输出 term weights 结构，索引落地下一步做）。
@@ -791,6 +798,14 @@
   - `tests/unit/test_sparse_encoder.py`
 - **验收标准**：输出结构可用于 bm25_indexer；对空文本有明确行为。
 - **测试方法**：`pytest -q tests/unit/test_sparse_encoder.py`。
+- **实现说明**：
+  - `SparseEncoder(min_term_length=2, lowercase=True)`：用 jieba 切词，中英文都能得到词粒度的 term。
+  - 每个 chunk 输出 `{"chunk_id", "term_frequencies", "doc_length", "unique_terms"}`——正是 C11 的 BM25Indexer 需要的四项（tf、文档长度、唯一词数、chunk 标识）。
+  - 只含标点/空白的 token 被丢弃；默认小写化；长度不足 `min_term_length` 的词不计入（可用 `lowercase=False` 保留大小写）。
+  - 空文本/纯空白 chunk 明确输出空 term_frequencies、doc_length=0、unique_terms=0，不抛异常。
+  - `get_corpus_stats()` 汇总 num_docs / avg_doc_length / document_frequency，供 IDF 计算直接使用。
+  - trace 记录 `sparse_encoder` 阶段：total_chunks / total_terms / unique_terms。
+  - 单元测试 20 个（`tests/unit/test_sparse_encoder.py`）。
 
 ### C10：BatchProcessor（批处理编排）
 - **目标**：实现 `batch_processor.py`：将 chunks 分 batch，驱动 dense/sparse 编码，记录批次耗时（为 trace 预留）。
@@ -799,6 +814,12 @@
   - `tests/unit/test_batch_processor.py`
 - **验收标准**：batch_size=2 时对 5 chunks 分成 3 批，且顺序稳定。
 - **测试方法**：`pytest -q tests/unit/test_batch_processor.py`。
+- **实现说明**：
+  - `BatchProcessor(dense_encoder, sparse_encoder, batch_size=100)`：按批切分 chunks，依次驱动 dense 与 sparse 编码，返回 `BatchResult`（dense_vectors / sparse_stats / batch_count / total_time / successful_chunks / failed_chunks）。
+  - 某一批编码失败不阻塞后续批次：失败的 chunk 计入 failed_chunks，其余批次继续，结果中的向量与统计仍与成功的 chunk 对齐。
+  - trace 逐批记录 `batch_{i}`（batch_size / duration_ms / chunks_processed），失败批次另记 `batch_{i}_error`，最后汇总 `batch_processing` 阶段。
+  - 空 chunk 列表与 `batch_size <= 0` 抛 `ValueError`。
+  - 单元测试 13 个（`tests/unit/test_batch_processor.py`）。
 
 ---
 
