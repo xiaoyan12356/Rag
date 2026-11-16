@@ -14,6 +14,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
 from core.settings import resolve_path
 
@@ -163,6 +164,41 @@ class SQLiteIntegrityChecker(FileIntegrityChecker):
                 """,
                 (file_hash, file_path, STATUS_FAILED, error_msg),
             )
+
+    def remove_record(self, file_hash: str) -> bool:
+        """Forget the file with this hash.
+
+        The record is what makes a file skippable, so removing it means the
+        next run ingests the file again.
+
+        Returns:
+            Whether a record was found and removed.
+        """
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "DELETE FROM ingestion_history WHERE file_hash = ?", (file_hash,)
+            )
+            return cursor.rowcount > 0
+
+    def list_processed(self) -> list[dict[str, Any]]:
+        """Return the files that were ingested successfully.
+
+        The records come back newest first, so the most recent ingestion is
+        the first one in the list.
+        """
+        with self._connect() as connection:
+            connection.row_factory = sqlite3.Row
+            rows = connection.execute(
+                """
+                SELECT file_hash, file_path, file_size, status, processed_at,
+                       error_msg, chunk_count
+                FROM ingestion_history
+                WHERE status = ?
+                ORDER BY processed_at DESC, file_hash ASC
+                """,
+                (STATUS_SUCCESS,),
+            ).fetchall()
+        return [dict(row) for row in rows]
 
     def _ensure_database(self) -> None:
         """Create the database file and its schema if they are not there yet."""

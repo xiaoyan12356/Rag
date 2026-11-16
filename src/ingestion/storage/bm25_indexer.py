@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -252,14 +253,36 @@ class BM25Indexer:
                 },
             )
 
-    def remove_document(self, doc_id: str, collection: str = DEFAULT_COLLECTION) -> bool:
+    def remove_document(
+        self,
+        doc_id: str,
+        collection: str = DEFAULT_COLLECTION,
+        chunk_ids: Sequence[str] | None = None,
+    ) -> bool:
         """Remove the chunks of a document from the index.
 
-        Returns whether anything was removed.
+        The chunks are found by their id prefixing `doc_id`, or taken from
+        `chunk_ids` when the caller knows exactly which chunks to drop. The
+        explicit list is what the document manager uses: the ids of a chunk
+        carry a hash of its text, so they cannot be derived from the id of
+        the document alone.
+
+        Args:
+            doc_id: The id of the document whose chunks are removed.
+            collection: The collection the index is filed under.
+            chunk_ids: The ids of the chunks to remove, when they are known.
+
+        Returns:
+            Whether anything was removed.
         """
         if not self._index and not self.load(collection):
             return False
-        if not self._drop_document(doc_id):
+
+        removed = False
+        if chunk_ids is not None:
+            removed = self._drop_chunks(chunk_ids)
+        removed = self._drop_document(doc_id) or removed
+        if not removed:
             return False
 
         self._recalculate(collection)
@@ -284,6 +307,14 @@ class BM25Indexer:
         for chunk_id in stale:
             del self._documents[chunk_id]
         return bool(stale)
+
+    def _drop_chunks(self, chunk_ids: Sequence[str]) -> bool:
+        """Remove the chunks with exactly these ids."""
+        removed = False
+        for chunk_id in chunk_ids:
+            if self._documents.pop(str(chunk_id), None) is not None:
+                removed = True
+        return removed
 
     def _recalculate(self, collection: str) -> None:
         """Recount the corpus and rebuild the inverted index from the documents."""
