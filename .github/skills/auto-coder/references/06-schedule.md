@@ -76,7 +76,7 @@
 | C4 | Splitter 集成（调用 Libs） | [x] | 2026-11-16 | DocumentChunker 适配器(稳定 chunk id + 元数据继承 + 图片按需分发) + 27 个单元测试 |
 | C5 | Transform 基类 + ChunkRefiner | [x] | 2026-11-16 | BaseTransform 抽象契约 + TraceContext 最小实现 + ChunkRefiner(规则去噪 + LLM 增强 + 降级) + 49 个单元测试 + 7 个真实 LLM 集成测试 |
 | C6 | MetadataEnricher | [x] | 2026-11-16 | MetadataEnricher(规则 title/summary/tags + 可选 LLM JSON 提取 + 降级) + metadata_enrichment prompt + 39 个单元测试 + 6 个真实 LLM 集成测试 |
-| C7 | ImageCaptioner | [ ] | | |
+| C7 | ImageCaptioner | [x] | 2026-11-16 | ImageCaptioner(按 image_refs 调 vision 模型写 caption + 失败降级标 has_unprocessed_images) + 28 个单元测试 |
 | C8 | DenseEncoder | [ ] | | |
 | C9 | SparseEncoder | [ ] | | |
 | C10 | BatchProcessor | [ ] | | |
@@ -158,14 +158,14 @@
 |------|---------|--------|------|
 | 阶段 A | 3 | 3 | 100% |
 | 阶段 B | 16 | 16 | 100% |
-| 阶段 C | 15 | 6 | 40% |
+| 阶段 C | 15 | 7 | 47% |
 | 阶段 D | 7 | 0 | 0% |
 | 阶段 E | 6 | 0 | 0% |
 | 阶段 F | 5 | 0 | 0% |
 | 阶段 G | 6 | 0 | 0% |
 | 阶段 H | 5 | 0 | 0% |
 | 阶段 I | 5 | 0 | 0% |
-| **总计** | **68** | **25** | **37%** |
+| **总计** | **68** | **26** | **38%** |
 
 
 ---
@@ -766,6 +766,15 @@
   - 启用模式：存在 image_refs 时会生成 caption 并写入 metadata（测试中用 mock Vision LLM 断言调用与输出）。
   - 降级模式：当配置禁用或异常时，chunk 保留 image_refs，但不生成 caption 且标记 `has_unprocessed_images`。
 - **测试方法**：`pytest -q tests/unit/test_image_captioner_fallback.py`。
+- **实现说明**：
+  - 只有 chunk 真的带图（`image_refs`，没有就从正文里的 `[IMAGE: xxx]` 占位符反查）才会去问模型；没有图的 chunk 原样返回，一个字都不改。
+  - 开关是 `vision_llm.enabled`：关掉时连模型都不会被构造。开启但 provider 不可用时捕获异常并降级，图片留在 chunk 里不动。
+  - 降级路径统一表现为"没有 caption + `has_unprocessed_images: True`"：模型报错、返回空、图片文件不存在、元数据里没有该图的记录——四种情况都不阻塞 ingestion。
+  - caption 同时写两处：`metadata["image_captions"]`（结构化，给检索用）和正文里占位符正下方（`[图片描述: ...]`），这样纯文本检索也能命中图片内容。
+  - 同一张图在一次运行里只问一次（`_captions` 缓存），多个 chunk 引用同一张图不会重复付费。
+  - 单张图失败不影响其他图：逐张统计，captioned / unprocessed 分开计数并写进 trace。
+  - 依赖 B8/B9 的 Vision LLM 抽象与 Azure provider，已在上一个提交补齐（阶段 B 至此 16/16 完成）。
+  - 单元测试 28 个（`tests/unit/test_image_captioner_fallback.py`）。
 
 ### C8：DenseEncoder（依赖 libs.embedding）
 - **目标**：实现 `dense_encoder.py`，把 chunks.text 批量送入 `BaseEmbedding`。
