@@ -33,6 +33,20 @@ class EvaluatorFactory:
         cls._builders[name] = builder
 
     @classmethod
+    def register_ragas(cls) -> None:
+        """Register the ragas provider.
+
+        The import happens here and not at the top of the module, so that a
+        project without ragas installed can still use the other evaluators.
+        """
+        from observability.evaluation.ragas_evaluator import RagasEvaluator
+
+        cls.register(
+            "ragas",
+            lambda settings: RagasEvaluator(settings.evaluation, settings=settings),
+        )
+
+    @classmethod
     def unregister(cls, provider: str) -> None:
         """Remove a provider registration; unknown names are ignored."""
         cls._builders.pop(provider.strip().lower(), None)
@@ -71,3 +85,6 @@ class EvaluatorFactory:
                 "which is not a BaseEvaluator"
             )
         return evaluator
+
+
+EvaluatorFactory.register_ragas()

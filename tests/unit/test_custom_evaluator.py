@@ -17,6 +17,13 @@ class RetrievedChunk:
         self.id = chunk_id
 
 
+class NamelessChunk:
+    """A chunk that carries no identifier at all."""
+
+    def __init__(self, text: str = "first") -> None:
+        self.text = text
+
+
 def make_evaluator(metrics: list[str] | None = None) -> CustomEvaluator:
     return CustomEvaluator(EvaluationSettings(provider="custom", metrics=metrics or []))
 
@@ -29,6 +36,62 @@ def make_settings(provider: str = "custom", enabled: bool = True) -> Settings:
             metrics=["hit_rate", "mrr"],
         )
     )
+
+
+class TestBaseEvaluator:
+    def test_cannot_be_instantiated_directly(self):
+        with pytest.raises(TypeError):
+            BaseEvaluator(EvaluationSettings())
+
+    def test_subclass_must_implement_evaluate(self):
+        class IncompleteEvaluator(BaseEvaluator):
+            pass
+
+        with pytest.raises(TypeError):
+            IncompleteEvaluator(EvaluationSettings())
+
+    def test_validate_query_rejects_a_query_that_is_not_a_string(self):
+        evaluator = make_evaluator()
+
+        with pytest.raises(ValueError, match="query must be a string"):
+            evaluator.validate_query(None)
+
+    def test_validate_query_rejects_an_empty_query(self):
+        evaluator = make_evaluator()
+
+        with pytest.raises(ValueError, match="query cannot be empty"):
+            evaluator.validate_query("   ")
+
+    def test_validate_retrieved_chunks_rejects_a_list_that_is_not_a_list(self):
+        evaluator = make_evaluator()
+
+        with pytest.raises(ValueError, match="must be a list"):
+            evaluator.validate_retrieved_chunks("not a list")
+
+    def test_validate_retrieved_chunks_rejects_an_empty_list(self):
+        evaluator = make_evaluator()
+
+        with pytest.raises(ValueError, match="cannot be empty"):
+            evaluator.validate_retrieved_chunks([])
+
+
+class TestNoneEvaluator:
+    def test_it_returns_no_metrics(self):
+        evaluator = NoneEvaluator(EvaluationSettings())
+
+        assert evaluator.evaluate("query", ["a"], ground_truth=["a"]) == {}
+
+    def test_it_still_refuses_an_empty_query(self):
+        evaluator = NoneEvaluator(EvaluationSettings())
+
+        with pytest.raises(ValueError):
+            evaluator.evaluate("  ", ["a"])
+
+    def test_it_still_refuses_an_empty_chunk_list(self):
+        evaluator = NoneEvaluator(EvaluationSettings())
+
+        with pytest.raises(ValueError):
+            evaluator.evaluate("query", [])
 
 
 class TestCustomEvaluator:
@@ -150,6 +213,82 @@ class TestCustomEvaluator:
         with pytest.raises(ValueError):
             evaluator.evaluate("query", [], ground_truth=["a"])
 
+    def test_a_query_that_is_not_a_string_is_rejected(self):
+        evaluator = make_evaluator()
+
+        with pytest.raises(ValueError, match="query must be a string"):
+            evaluator.evaluate(None, ["a"], ground_truth=["a"])
+
+    def test_a_retrieved_list_that_is_not_a_list_is_rejected(self):
+        evaluator = make_evaluator()
+
+        with pytest.raises(ValueError, match="must be a list"):
+            evaluator.evaluate("query", "not a list", ground_truth=["a"])
+
+    def test_metric_names_are_matched_without_regard_to_case(self):
+        evaluator = make_evaluator(metrics=["HIT_RATE"])
+
+        metrics = evaluator.evaluate("query", ["a"], ground_truth=["a"])
+
+        assert set(metrics) == {"hit_rate"}
+
+    def test_metric_names_are_matched_without_regard_to_spaces(self):
+        evaluator = make_evaluator(metrics=[" hit_rate "])
+
+        metrics = evaluator.evaluate("query", ["a"], ground_truth=["a"])
+
+        assert set(metrics) == {"hit_rate"}
+
+    def test_a_repeated_metric_is_reported_once(self):
+        evaluator = make_evaluator(metrics=["hit_rate", "hit_rate"])
+
+        metrics = evaluator.evaluate("query", ["a"], ground_truth=["a"])
+
+        assert set(metrics) == {"hit_rate"}
+
+    def test_a_chunk_without_any_identifier_is_rejected(self):
+        evaluator = make_evaluator()
+
+        with pytest.raises(EvaluatorError, match="Unable to extract id"):
+            evaluator.evaluate("query", [NamelessChunk()], ground_truth=["a"])
+
+    def test_golden_ids_accept_a_mapping_without_an_ids_key(self):
+        evaluator = make_evaluator()
+
+        metrics = evaluator.evaluate("query", ["a"], ground_truth={"chunk_id": "a"})
+
+        assert metrics["hit_rate"] == 1.0
+
+    def test_golden_ids_accept_a_list_of_mappings(self):
+        evaluator = make_evaluator()
+
+        metrics = evaluator.evaluate("query", ["a"], ground_truth=[{"id": "a"}])
+
+        assert metrics["hit_rate"] == 1.0
+
+    def test_golden_ids_of_an_unsupported_type_are_rejected(self):
+        evaluator = make_evaluator()
+
+        with pytest.raises(EvaluatorError, match="Unsupported ground_truth type"):
+            evaluator.evaluate("query", ["a"], ground_truth=42)
+
+    def test_the_generated_answer_does_not_change_the_metrics(self):
+        evaluator = make_evaluator()
+
+        without = evaluator.evaluate("query", ["a"], ground_truth=["a"])
+        with_answer = evaluator.evaluate(
+            "query", ["a"], generated_answer="a long answer", ground_truth=["a"]
+        )
+
+        assert without == with_answer
+
+    def test_a_tuple_of_chunks_is_accepted(self):
+        evaluator = make_evaluator()
+
+        metrics = evaluator.evaluate("query", ("a", "b"), ground_truth=["b"])
+
+        assert metrics["hit_rate"] == 1.0
+
 
 class TestEvaluatorFactory:
     def test_custom_provider_returns_the_custom_evaluator(self):
@@ -246,3 +385,33 @@ class TestEvaluatorFactory:
     def test_registering_an_empty_provider_name_is_rejected(self):
         with pytest.raises(ValueError):
             EvaluatorFactory.register("", lambda settings: CustomEvaluator(settings.evaluation))
+
+    def test_registering_a_provider_normalises_the_name(self):
+        EvaluatorFactory.register(
+            "  Temporary  ", lambda settings: CustomEvaluator(settings.evaluation)
+        )
+        try:
+            assert "temporary" in EvaluatorFactory.registered_providers()
+        finally:
+            EvaluatorFactory.unregister("temporary")
+
+    def test_unregistering_an_unknown_provider_is_ignored(self):
+        EvaluatorFactory.unregister("never-registered")
+
+        assert "never-registered" not in EvaluatorFactory.registered_providers()
+
+    def test_a_provider_name_with_spaces_is_accepted(self):
+        evaluator = EvaluatorFactory.create(make_settings("  custom  "))
+
+        assert isinstance(evaluator, CustomEvaluator)
+
+    def test_a_builder_that_fails_is_not_hidden(self):
+        def broken(settings):
+            raise RuntimeError("the framework is not there")
+
+        EvaluatorFactory.register("broken", broken)
+        try:
+            with pytest.raises(RuntimeError, match="the framework is not there"):
+                EvaluatorFactory.create(make_settings("broken"))
+        finally:
+            EvaluatorFactory.unregister("broken")

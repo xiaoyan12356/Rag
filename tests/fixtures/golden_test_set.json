@@ -1,0 +1,30 @@
+{
+  "description": "Golden test set for the retrieval regression. The chunk ids are the ids the vector upserter gives a chunk: sha256(source_path)[:8]_chunk_index:04d_sha256(text)[:8].",
+  "test_cases": [
+    {
+      "query": "how do I configure Azure OpenAI?",
+      "expected_chunk_ids": ["5ecf4f73_0000_df65e91c"],
+      "expected_sources": ["docs/azure_setup.md"]
+    },
+    {
+      "query": "where are the embeddings stored?",
+      "expected_chunk_ids": ["85fa1204_0000_ff3a8aab"],
+      "expected_sources": ["docs/vector_store.md"]
+    },
+    {
+      "query": "what does the BM25 index count?",
+      "expected_chunk_ids": ["0f0f6e29_0000_df63b943"],
+      "expected_sources": ["docs/sparse_index.md"]
+    },
+    {
+      "query": "how are documents ingested into the knowledge hub?",
+      "expected_chunk_ids": ["ca5e7727_0000_2de97801"],
+      "expected_sources": ["docs/ingestion.md"]
+    },
+    {
+      "query": "which tools does the MCP server offer?",
+      "expected_chunk_ids": ["89d5b781_0000_87b18833"],
+      "expected_sources": ["docs/mcp_server.md"]
+    }
+  ]
+}

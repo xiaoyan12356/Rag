@@ -73,12 +73,14 @@ class CustomEvaluator(BaseEvaluator):
                         f"Expected one of {', '.join(self.ID_FIELDS)}"
                     )
                 continue
-            if hasattr(item, "id"):
-                ids.append(str(item.id))
-                continue
-            raise EvaluatorError(
-                f"Unable to extract id from {label}[{index}] of type {type(item).__name__}"
-            )
+            for field in self.ID_FIELDS:
+                if hasattr(item, field):
+                    ids.append(str(getattr(item, field)))
+                    break
+            else:
+                raise EvaluatorError(
+                    f"Unable to extract id from {label}[{index}] of type {type(item).__name__}"
+                )
         return ids
 
     def _extract_golden_ids(self, ground_truth: Any) -> list[str]:

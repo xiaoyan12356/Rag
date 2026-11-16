@@ -94,6 +94,7 @@ dmypy.json
 data/
 cache/
 logs/
+reports/
 *.log
 traces.jsonl
 
