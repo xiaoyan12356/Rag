@@ -133,6 +133,33 @@ class ChunkRecord:
         )
 
 
+@dataclass
+class RetrievalResult:
+    """A chunk the search found, with the score that brought it back.
+
+    `score` is the score of the route the result came from, or of the fusion
+    that put it there. The scores of the single routes are kept beside it, so
+    a result can be explained after the fact.
+    """
+
+    chunk_id: str
+    score: float
+    text: str = ""
+    metadata: Metadata = field(default_factory=dict)
+    dense_score: float | None = None
+    sparse_score: float | None = None
+    rank: int | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the result as a plain dictionary."""
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any]) -> RetrievalResult:
+        """Rebuild a result from a dictionary."""
+        return cls(**data)
+
+
 def _require_source_path(owner: str, metadata: Mapping[str, Any]) -> None:
     if "source_path" not in metadata:
         raise ValueError(f"{owner} metadata must contain 'source_path'")
