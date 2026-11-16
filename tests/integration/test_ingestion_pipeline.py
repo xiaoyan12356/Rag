@@ -12,6 +12,7 @@ pages and a picture on every page, so that the image path is walked too.
 from __future__ import annotations
 
 import io
+import json
 from pathlib import Path
 
 import pymupdf
@@ -25,7 +26,7 @@ from core.settings import (
     VectorStoreSettings,
 )
 from core.trace.trace_context import TraceContext
-from ingestion.pipeline import IngestionPipeline, PipelineError
+from ingestion.pipeline import STAGES, IngestionPipeline, PipelineError
 from libs.embedding.base_embedding import BaseEmbedding
 
 DIMENSION = 8
@@ -184,8 +185,8 @@ class TestRun:
             "load",
             "split",
             "transform",
-            "encode",
-            "store",
+            "embed",
+            "upsert",
         }
 
     def test_every_stage_is_timed(self, pipeline, document):
@@ -257,7 +258,7 @@ class TestProgress:
 
         pipeline.run(document, on_progress=lambda stage, step, total: seen.append(stage))
 
-        assert seen == ["integrity", "load", "split", "transform", "encode", "store"]
+        assert [stage for stage in seen if stage in STAGES] == list(STAGES)
 
     def test_the_steps_are_numbered(self, pipeline, document):
         steps: list[tuple[int, int]] = []
@@ -265,7 +266,7 @@ class TestProgress:
         pipeline.run(document, on_progress=lambda stage, step, total: steps.append((step, total)))
 
         assert steps[0] == (1, 6)
-        assert steps[-1] == (6, 6)
+        assert (6, 6) in steps
 
 
 class TestTrace:
@@ -274,7 +275,7 @@ class TestTrace:
 
         pipeline.run(document, trace=trace)
 
-        for stage in ("integrity", "load", "split", "transform", "encode", "store"):
+        for stage in ("integrity", "load", "split", "transform", "embed", "upsert"):
             assert trace.get_stage_data(stage) is not None
 
     def test_the_trace_records_what_the_split_did(self, pipeline, document):
@@ -284,3 +285,38 @@ class TestTrace:
 
         data = trace.get_stage_data("split")
         assert data["chunk_count"] > 0
+
+    def test_the_trace_is_an_ingestion(self, pipeline, document):
+        trace = TraceContext()
+
+        pipeline.run(document, trace=trace)
+
+        assert trace.to_dict()["trace_type"] == "ingestion"
+
+    def test_every_step_names_the_method_that_did_the_work(self, pipeline, document):
+        trace = TraceContext()
+
+        pipeline.run(document, trace=trace)
+
+        for stage in ("load", "split", "transform", "embed", "upsert"):
+            data = trace.get_stage_data(stage)
+            assert data["method"], stage
+            assert data["provider"], stage
+
+    def test_every_step_says_how_long_it_took(self, pipeline, document):
+        trace = TraceContext()
+
+        pipeline.run(document, trace=trace)
+
+        for stage in ("load", "split", "transform", "embed", "upsert"):
+            assert trace.get_stage(stage)["elapsed_ms"] >= 0.0, stage
+
+    def test_the_trace_can_be_written_out(self, pipeline, document):
+        trace = TraceContext()
+
+        pipeline.run(document, trace=trace)
+        trace.finish()
+
+        written = json.dumps(trace.to_dict())
+
+        assert json.loads(written)["trace_type"] == "ingestion"

@@ -44,6 +44,7 @@ if sys.platform == "win32":  # pragma: no cover - depends on the terminal
 from core.query_engine.hybrid_search import HybridSearch  # noqa: E402
 from core.query_engine.reranker import Reranker  # noqa: E402
 from core.settings import SettingsError, load_settings  # noqa: E402
+from core.trace.trace_collector import collect_trace  # noqa: E402
 from core.trace.trace_context import TraceContext  # noqa: E402
 from core.types import RetrievalResult  # noqa: E402
 
@@ -168,6 +169,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"[INFO] Query: {args.query}")
 
     trace = TraceContext(trace_type="query")
+    trace.metadata["query"] = args.query
+    trace.metadata["collection"] = args.collection
     try:
         search = HybridSearch(settings, collection=args.collection)
         results = search.search(args.query, args.top_k, trace=trace)
@@ -201,6 +204,8 @@ def main(argv: list[str] | None = None) -> int:
             (trace.get_stage_data("fusion") or {}).get("chunk_ids", []),
             results,
         )
+
+    collect_trace(trace, settings)
 
     print("=" * 60)
     print(f"RESULTS ({len(results)})")

@@ -12,6 +12,7 @@ order the fusion found and says so.
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import replace
 from typing import Any
 
@@ -64,6 +65,7 @@ class Reranker:
         if not results:
             return []
 
+        started = time.monotonic()
         candidates = [
             {
                 "id": result.chunk_id,
@@ -78,14 +80,29 @@ class Reranker:
         except Exception as exc:
             logger.warning("The reranker failed, the original order is kept: %s", exc)
             self.fallback_used = True
-            self._record(trace, query, results, results, fallback=True, error=str(exc))
+            self._record(
+                trace,
+                query,
+                results,
+                results,
+                fallback=True,
+                error=str(exc),
+                elapsed_ms=(time.monotonic() - started) * 1000.0,
+            )
             return self._take(results, top_k)
 
         self.fallback_used = bool(getattr(self.backend, "fallback_used", False))
         merged = self._merge(results, reordered)
 
         if trace is not None:
-            self._record(trace, query, results, merged, fallback=self.fallback_used)
+            self._record(
+                trace,
+                query,
+                results,
+                merged,
+                fallback=self.fallback_used,
+                elapsed_ms=(time.monotonic() - started) * 1000.0,
+            )
 
         return self._take(merged, top_k)
 
@@ -138,6 +155,7 @@ class Reranker:
         after: list[RetrievalResult],
         fallback: bool,
         error: str | None = None,
+        elapsed_ms: float | None = None,
     ) -> None:
         """Record what the reranker did."""
         if trace is None:
@@ -153,4 +171,4 @@ class Reranker:
         }
         if error is not None:
             data["error"] = error
-        trace.record_stage("rerank", data)
+        trace.record_stage("rerank", data, elapsed_ms=elapsed_ms)

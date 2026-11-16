@@ -4,8 +4,8 @@ The pipeline walks a document from the file on disk to the places where it
 can be found again. The text is loaded, cut into chunks, cleaned, described,
 turned into vectors and written to the stores.
 
-The steps run one after the other: integrity, load, split, transform, encode,
-store. A step that fails stops the run with an error that names the step, so
+The steps run one after the other: integrity, load, split, transform, embed,
+upsert. A step that fails stops the run with an error that names the step, so
 the reason a document did not make it is never a guess.
 """
 
@@ -40,7 +40,18 @@ from libs.loader.pdf_loader import PdfLoader
 logger = logging.getLogger(__name__)
 
 DEFAULT_COLLECTION = "default"
-STAGES = ("integrity", "load", "split", "transform", "encode", "store")
+STAGES = ("integrity", "load", "split", "transform", "embed", "upsert")
+
+# The method and the provider of every step of the pipeline, so that a trace
+# says which tool did the work and not only that it was done.
+STAGE_METHODS = {
+    "integrity": ("sha256", "builtin"),
+    "load": ("markitdown", "builtin"),
+    "split": ("recursive", "builtin"),
+    "transform": ("rules", "builtin"),
+    "embed": ("dense+sparse", "embedding"),
+    "upsert": ("chroma", "vector_store"),
+}
 
 
 class PipelineError(Exception):
@@ -143,7 +154,10 @@ class IngestionPipeline:
             file_path: The document to ingest.
             trace: A trace to record the run in.
             on_progress: Called with the name of a step, the number of the
-                step and the number of steps, once the step is done.
+                step and the number of steps, once the step is done. The
+                embedding step also reports every batch it finished under
+                the name "embed_batch", with the number of the batch and
+                the number of batches.
 
         Raises:
             PipelineError: When a step of the pipeline fails.
@@ -154,10 +168,19 @@ class IngestionPipeline:
         chunks: list[Chunk] = []
         vector_ids: list[str] = []
 
+        if trace is not None:
+            # The pipeline knows what kind of run this is, so the trace says
+            # so too, whoever made it.
+            trace.trace_type = "ingestion"
+
         def notify(stage: str, step: int) -> None:
             logger.info("Step %d/%d: %s", step, len(STAGES), stage)
             if on_progress is not None:
                 on_progress(stage, step, len(STAGES))
+
+        def notify_batch(batch: int, batches: int) -> None:
+            if on_progress is not None:
+                on_progress("embed_batch", batch, batches)
 
         try:
             with self._step("integrity", stages, notify, 1):
@@ -219,27 +242,28 @@ class IngestionPipeline:
             )
             self._record(trace, "transform", stages)
 
-            with self._step("encode", stages, notify, 5):
-                encoded = self._encode(chunks)
-            stages["encode"].update(
+            with self._step("embed", stages, notify, 5):
+                encoded = self._encode(chunks, on_batch=notify_batch)
+            stages["embed"].update(
                 {
                     "dense_vector_count": len(encoded.dense_vectors),
                     "sparse_doc_count": len(encoded.sparse_stats),
                     "failed_chunks": encoded.failed_chunks,
+                    "batch_count": encoded.batch_count,
                 }
             )
-            self._record(trace, "encode", stages)
+            self._record(trace, "embed", stages)
 
-            with self._step("store", stages, notify, 6):
+            with self._step("upsert", stages, notify, 6):
                 vector_ids = self._store(chunks, encoded, document, file_hash)
-            stages["store"].update(
+            stages["upsert"].update(
                 {
                     "vector_count": len(vector_ids),
                     "bm25_docs": len(encoded.sparse_stats),
                     "images_indexed": len(document.metadata.get("images", []) or []),
                 }
             )
-            self._record(trace, "store", stages)
+            self._record(trace, "upsert", stages)
         except PipelineError:
             if file_hash:
                 self._mark_failed(file_hash, str(path))
@@ -283,17 +307,30 @@ class IngestionPipeline:
             )
         notify(stage, step)
 
-    @staticmethod
     def _record(
+        self,
         trace: TraceContext | None,
         stage: str,
         stages: dict[str, Any],
     ) -> None:
-        """Write what a step did into the trace."""
+        """Write what a step did into the trace.
+
+        The method and the provider of the step are added to what the step
+        reported, so that a trace says which tool did the work.
+        """
         if trace is None:
             return
         details = dict(stages.get(stage, {}))
         elapsed_ms = details.pop("duration_ms", None)
+        method, provider = STAGE_METHODS.get(stage, (stage, "builtin"))
+        if stage == "split":
+            method = self.settings.ingestion.splitter or method
+        elif stage == "embed":
+            provider = self.settings.embedding.provider or "none"
+        elif stage == "upsert":
+            provider = self.settings.vector_store.provider or "none"
+        details["method"] = method
+        details["provider"] = provider
         trace.record_stage(stage, details, elapsed_ms=elapsed_ms)
 
     def _transform(self, chunks: list[Chunk]) -> list[Chunk]:
@@ -304,19 +341,65 @@ class IngestionPipeline:
         logger.info("Cleaned and described %d chunks", len(chunks))
         return chunks
 
-    def _encode(self, chunks: list[Chunk]) -> BatchResult:
+    def _encode(
+        self,
+        chunks: list[Chunk],
+        on_batch: Callable[[int, int], None] | None = None,
+    ) -> BatchResult:
         """Turn the chunks into vectors and term statistics.
 
         A chunk that could not be encoded is a failure of the run: the
         stores would otherwise hold a text without a vector beside it.
+
+        Args:
+            chunks: The chunks to encode.
+            on_batch: Called with the number of the batch that was done and
+                the number of batches, once a batch is done.
         """
-        result = self.batch_processor.process(chunks)
+        if on_batch is None:
+            result = self.batch_processor.process(chunks)
+        else:
+            result = self._encode_batch_by_batch(chunks, on_batch)
+
         if result.failed_chunks:
             raise RuntimeError(
                 f"{result.failed_chunks} of {len(chunks)} chunks could not be encoded"
             )
         logger.info("Encoded %d chunks into %d vectors", len(chunks), len(result.dense_vectors))
         return result
+
+    def _encode_batch_by_batch(
+        self,
+        chunks: list[Chunk],
+        on_batch: Callable[[int, int], None],
+    ) -> BatchResult:
+        """Encode the chunks one batch at a time, saying how far it has come.
+
+        The batches are the ones the batch processor would use, so the work
+        is the same; only the reporting is finer.
+        """
+        batches = self.batch_processor.get_batch_count(len(chunks))
+        result = BatchResult(batch_count=batches)
+        started = time.monotonic()
+
+        for index, batch in enumerate(self._split_into_batches(chunks), start=1):
+            outcome = self.batch_processor.process(batch)
+            result.dense_vectors.extend(outcome.dense_vectors)
+            result.sparse_stats.extend(outcome.sparse_stats)
+            result.successful_chunks += outcome.successful_chunks
+            result.failed_chunks += outcome.failed_chunks
+            on_batch(index, batches)
+
+        result.total_time = time.monotonic() - started
+        return result
+
+    def _split_into_batches(self, chunks: list[Chunk]) -> list[list[Chunk]]:
+        """Split the chunks into batches of the size the processor uses."""
+        size = self.batch_processor.batch_size
+        return [
+            chunks[start : start + size]
+            for start in range(0, len(chunks), size)
+        ]
 
     def _store(
         self,

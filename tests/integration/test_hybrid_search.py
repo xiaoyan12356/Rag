@@ -10,6 +10,7 @@ The corpus is small on purpose, so that every result can be said out loud.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pytest
@@ -280,3 +281,48 @@ class TestTrace:
         assert trace.get_stage_data("dense_retrieval") is not None
         assert trace.get_stage_data("sparse_retrieval") is not None
         assert trace.get_stage_data("fusion") is not None
+
+    def test_the_trace_is_a_query(self, search):
+        trace = TraceContext()
+
+        search.search("bm25 index terms", trace=trace)
+
+        assert trace.to_dict()["trace_type"] == "query"
+
+    def test_every_stage_names_the_method_that_did_the_work(self, search):
+        trace = TraceContext()
+
+        search.search("bm25 index terms", trace=trace)
+
+        for stage in (
+            "query_processing",
+            "dense_retrieval",
+            "sparse_retrieval",
+            "fusion",
+        ):
+            data = trace.get_stage_data(stage)
+            assert data["method"], stage
+            assert data["provider"], stage
+
+    def test_every_stage_says_how_long_it_took(self, search):
+        trace = TraceContext()
+
+        search.search("bm25 index terms", trace=trace)
+
+        for stage in (
+            "query_processing",
+            "dense_retrieval",
+            "sparse_retrieval",
+            "fusion",
+        ):
+            assert trace.get_stage(stage)["elapsed_ms"] >= 0.0, stage
+
+    def test_the_trace_can_be_written_out(self, search):
+        trace = TraceContext()
+
+        search.search("bm25 index terms", trace=trace)
+        trace.finish()
+
+        written = json.dumps(trace.to_dict())
+
+        assert json.loads(written)["trace_type"] == "query"

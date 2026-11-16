@@ -12,6 +12,7 @@ used on its own. Only when both routes fail is the search a failure.
 from __future__ import annotations
 
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
@@ -27,6 +28,15 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_TOP_K = 10
 COLLECTION_KEY = "collection"
+
+# The method and the provider of every stage of the query, so that a trace
+# says which route did the work and not only that it was done.
+STAGE_METHODS = {
+    "query_processing": ("tokenize", "builtin"),
+    "dense_retrieval": ("dense", "embedding"),
+    "sparse_retrieval": ("bm25", "builtin"),
+    "fusion": ("rrf", "builtin"),
+}
 
 
 class HybridSearch:
@@ -82,7 +92,13 @@ class HybridSearch:
             filters: The metadata the results have to match.
             trace: A trace to record the work in.
         """
+        started = time.monotonic()
+        if trace is not None:
+            # The search knows what kind of run this is, so the trace says
+            # so too, whoever made it.
+            trace.trace_type = "query"
         processed = self.query_processor.process(query, filters, trace)
+        self._annotate(trace, "query_processing", started)
 
         limit = (
             top_k
@@ -104,10 +120,32 @@ class HybridSearch:
         dense_results, sparse_results = self._retrieve_both(
             processed, limit, metadata_filters, trace
         )
+
+        started = time.monotonic()
         fused = self.fusion.fuse(dense_results, sparse_results, trace=trace)
+        self._annotate(trace, "fusion", started)
+
         filtered = self._apply_metadata_filters(fused, metadata_filters)
 
         return filtered[:limit]
+
+    def _annotate(self, trace: TraceContext | None, stage: str, started: float) -> None:
+        """Say how long a stage took and which method did it.
+
+        The stage itself was recorded by the part that did the work, so only
+        what that part cannot know is added here.
+        """
+        if trace is None:
+            return
+        method, provider = STAGE_METHODS[stage]
+        if stage == "dense_retrieval":
+            provider = self.settings.embedding.provider or "none"
+        trace.annotate_stage(
+            stage,
+            method=method,
+            provider=provider,
+            _elapsed_ms=(time.monotonic() - started) * 1000.0,
+        )
 
     def _retrieve_both(
         self,
@@ -147,6 +185,7 @@ class HybridSearch:
         trace: TraceContext | None,
     ) -> tuple[list[RetrievalResult], Exception | None]:
         """Ask the dense route, and report the failure instead of raising it."""
+        started = time.monotonic()
         try:
             results = self.dense_retriever.retrieve(
                 processed.original_query,
@@ -157,6 +196,7 @@ class HybridSearch:
         except Exception as exc:
             logger.warning("The dense route failed, the sparse route carries on: %s", exc)
             return [], exc
+        self._annotate(trace, "dense_retrieval", started)
         return list(results), None
 
     def _safe_sparse(
@@ -166,6 +206,7 @@ class HybridSearch:
         trace: TraceContext | None,
     ) -> tuple[list[RetrievalResult], Exception | None]:
         """Ask the sparse route, and report the failure instead of raising it."""
+        started = time.monotonic()
         try:
             results = self.sparse_retriever.retrieve(
                 processed.keywords,
@@ -175,6 +216,7 @@ class HybridSearch:
         except Exception as exc:
             logger.warning("The sparse route failed, the dense route carries on: %s", exc)
             return [], exc
+        self._annotate(trace, "sparse_retrieval", started)
         return list(results), None
 
     def _metadata_filters(self, filters: dict[str, Any]) -> dict[str, Any]:

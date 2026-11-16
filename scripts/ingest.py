@@ -40,6 +40,7 @@ if sys.platform == "win32":  # pragma: no cover - depends on the terminal
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
 from core.settings import SettingsError, load_settings  # noqa: E402
+from core.trace.trace_collector import collect_trace  # noqa: E402
 from core.trace.trace_context import TraceContext  # noqa: E402
 from ingestion.pipeline import IngestionPipeline, PipelineError, PipelineResult  # noqa: E402
 
@@ -233,6 +234,7 @@ def main(argv: list[str] | None = None) -> int:
             print("   [SKIP] It was taken in before")
         else:
             print(f"   [OK] {result.chunk_count} chunks, {result.image_count} images")
+        collect_trace(trace, settings)
 
     print_summary(outcomes, args.verbose)
 
