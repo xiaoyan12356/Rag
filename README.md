@@ -9,6 +9,11 @@
 - [项目概述](#-项目概述)
 - [分支说明](#-分支说明)
 - [快速开始](#-快速开始)
+- [配置说明](#-配置说明)
+- [MCP 配置示例](#-mcp-配置示例)
+- [Dashboard 使用指南](#-dashboard-使用指南)
+- [运行测试](#-运行测试)
+- [运行排错 FAQ](#-运行排错-faq)
 - [谁适合用这个项目 & 怎么用](#-谁适合用这个项目--怎么用)
 - [简历参考](#-简历参考)
 - [常见问题](#-常见问题)
@@ -150,6 +155,269 @@ src/
 ```
 
 配置文件在 `config/settings.yaml`，Prompt 模板在 `config/prompts/`，运行时数据写入 `data/`、`cache/`、`logs/`（均不纳入版本管理）。
+
+### 4. 跑通第一次摄取与查询
+
+配置好之后，四条命令就能把整条链路跑一遍：
+
+```bash
+# 1) 摄取文档（把 PDF 放进 data/documents/，或用 --path 指定任意目录）
+uv run python scripts/ingest.py --path data/documents --collection default
+
+# 2) 提问（--verbose 会打印 dense / sparse / 融合 / 重排各阶段的结果）
+uv run python scripts/query.py --query "你的问题" --verbose
+
+# 3) 跑一次评估（golden test set 回归，输出 hit_rate / mrr）
+uv run python scripts/evaluate.py
+
+# 4) 打开可视化面板
+uv run streamlit run src/observability/dashboard/app.py
+```
+
+> ⚠️ `scripts/evaluate.py` 默认跑的是仓库自带的 `tests/fixtures/golden_test_set.json`，
+> 它对应的是**固定的回归语料**（`docs/*.md`，见 `tests/e2e/test_recall.py`）。
+> 你摄取自己的文档后再跑它，命中的自然是 0——这不是检索坏了，而是语料不同。
+> 想评估自己的语料，就用 `--test-set` 指向按你的文档写的 golden test set；
+> 只想确认评估链路能跑通，用 `--no-search`（跳过真实检索，走占位结果）。
+
+启动 MCP Server（给 Copilot / Claude 等客户端用）：
+
+```bash
+uv run python main.py                      # 默认读 config/settings.yaml
+uv run python main.py --config <你的配置>   # 换一个配置文件
+uv run python main.py --mode plain          # 不走 MCP SDK，直接讲 JSON-RPC
+```
+
+> 💡 `main.py` 只在 **stdout** 上输出 MCP 协议消息，所有日志都走 **stderr**——这是 stdio 传输的要求，不要往 stdout 打印任何别的东西。
+
+---
+
+## 🧩 配置说明
+
+`config/settings.yaml` 是唯一的配置来源：**切换 Provider 不需要改一行代码**，改 YAML 即可。
+
+| 分组 | 字段 | 说明 | 默认值 |
+|------|------|------|--------|
+| **llm** | `provider` | `openai` / `azure` / `ollama` / `deepseek` / `qwen` / `gemini` | `openai` |
+| | `model` / `deployment_name` | 模型名；Azure 用部署名 | - |
+| | `azure_endpoint` / `api_version` | Azure 必填 | - |
+| | `api_key` | 留空则读环境变量 `OPENAI_API_KEY` 等 | `""` |
+| | `base_url` | 自建 / 本地服务地址（Ollama 填 `http://localhost:11434`） | `""` |
+| | `temperature` / `max_tokens` | 生成参数 | `0.0` / `4096` |
+| **embedding** | `provider` / `model` | 向量模型；**换了模型必须同时改 `dimensions`** | `openai` / `text-embedding-ada-002` |
+| | `dimensions` | 向量维度，**必须与模型实际输出一致**，否则写入或检索会报错 | `1536` |
+| **vision_llm** | `enabled` | 是否给图片生成描述（搜文字出图） | `false` |
+| | `provider` / `model` / `max_image_size` | 视觉模型与图片边长上限 | `openai` / `gpt-4o` / `2048` |
+| **vector_store** | `provider` | `chroma`（本地）/ `qdrant` / `pinecone` | `chroma` |
+| | `persist_directory` | 向量库落盘目录 | `./data/db/chroma` |
+| | `collection_name` | 默认集合名 | `knowledge_hub` |
+| **retrieval** | `dense_top_k` / `sparse_top_k` | 两条粗排路线各取多少 | `20` / `20` |
+| | `fusion_top_k` | RRF 融合后保留多少 | `10` |
+| | `rrf_k` | RRF 平滑常数，越小头部权重差距越大 | `60` |
+| **rerank** | `enabled` / `provider` | `none` / `cross_encoder` / `llm` | `false` / `none` |
+| | `model` / `top_k` | 重排模型与精排条数 | - / `5` |
+| **evaluation** | `enabled` / `provider` | `custom`（检索指标）/ `ragas`（生成质量） | `false` / `custom` |
+| | `metrics` | 参与评估的指标 | `hit_rate`, `mrr` |
+| **observability** | `log_level` / `trace_enabled` / `trace_file` | 日志级别与追踪文件位置 | `INFO` / `true` / `./logs/traces.jsonl` |
+| | `structured_logging` | 是否输出 JSON Lines 结构化日志 | `true` |
+| **ingestion** | `chunk_size` / `chunk_overlap` | 切块大小与重叠；**改了必须重新摄取** | `1000` / `200` |
+| | `splitter` | `recursive` / `semantic` / `fixed_length` | `recursive` |
+| | `batch_size` | 编码批大小，太大容易显存/内存爆 | `100` |
+| | `chunk_refiner.use_llm` / `metadata_enricher.use_llm` | 是否用 LLM 精炼与增强元数据（更准但更慢更贵） | `false` |
+| **dashboard** | `enabled` / `port` | 面板开关与端口 | `true` / `8501` |
+| | `traces_dir` / `auto_refresh` / `refresh_interval` | 追踪目录与自动刷新 | `./logs` / `true` / `5` |
+
+**几条容易踩的坑：**
+
+- **API Key 留空即可**，代码会自动读环境变量：`OPENAI_API_KEY`、`AZURE_API_KEY`、`DEEPSEEK_API_KEY`、`DASHSCOPE_API_KEY`、`GEMINI_API_KEY` 等。这样配置文件可以安全地提交，密钥不进版本库。
+- **`embedding.dimensions` 必须和模型对得上**。换了 embedding 模型却没改维度，写入和检索都会失败——这是最常见的配置错误。
+- **所有相对路径都相对仓库根目录**，不是相对当前工作目录。所以从任何地方启动 Server 读写的是同一份数据。
+- **改完 `chunk_size` / `chunk_overlap` / `splitter` 要重新摄取**（`--force`），否则旧的分块还在库里。
+
+---
+
+## 🔌 MCP 配置示例
+
+本项目就是一个标准的 **MCP Server**（stdio 传输），任何支持 MCP 的客户端都能接。
+
+### GitHub Copilot（VS Code）
+
+在项目根目录建 `.vscode/mcp.json`：
+
+```json
+{
+  "servers": {
+    "modular-rag": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["${workspaceFolder}/main.py"],
+      "env": {
+        "SMART_KNOWLEDGE_HUB_CONFIG": "${workspaceFolder}/config/settings.yaml"
+      }
+    }
+  }
+}
+```
+
+### Claude Desktop
+
+编辑 `claude_desktop_config.json`（Windows：`%APPDATA%\Claude\claude_desktop_config.json`；macOS：`~/Library/Application Support/Claude/claude_desktop_config.json`）：
+
+```json
+{
+  "mcpServers": {
+    "modular-rag": {
+      "command": "/absolute/path/to/MODULAR-RAG-MCP-SERVER/.venv/bin/python",
+      "args": ["/absolute/path/to/MODULAR-RAG-MCP-SERVER/main.py"],
+      "env": {
+        "SMART_KNOWLEDGE_HUB_CONFIG": "/absolute/path/to/MODULAR-RAG-MCP-SERVER/config/settings.yaml"
+      }
+    }
+  }
+}
+```
+
+### Cursor / Claude Code 等其它客户端
+
+原理完全一样，只是配置文件的键名不同：
+
+| 客户端 | 配置文件 | 键名 |
+|--------|----------|------|
+| GitHub Copilot (VS Code) | `.vscode/mcp.json` | `servers` |
+| Claude Desktop | `claude_desktop_config.json` | `mcpServers` |
+| Cursor | `~/.cursor/mcp.json` | `mcpServers` |
+| Claude Code | `~/.claude.json` 或项目内 `.mcp.json` | `mcpServers` |
+
+**注意：**
+
+- **路径必须是绝对路径**（Claude Desktop 尤其如此，它的工作目录不是你的项目目录）。`${workspaceFolder}` 只有 VS Code 支持。
+- **`command` 要指向装了依赖的解释器**：用虚拟环境里的 `python`，而不是系统 `python`。
+- **配置文件有两种指定方式**：`env` 里的 `SMART_KNOWLEDGE_HUB_CONFIG` 环境变量，或启动参数 `--config <路径>`。两者都生效，参数优先。
+- **接上之后能看到三个工具**：`query_knowledge_hub`（检索问答，返回带引用的答案）、`list_collections`（列出集合）、`get_document_summary`（取单篇文档的摘要与标签）。
+
+---
+
+## 📊 Dashboard 使用指南
+
+```bash
+uv run streamlit run src/observability/dashboard/app.py
+# 端口被占用时：uv run streamlit run src/observability/dashboard/app.py --server.port 8502
+```
+
+浏览器打开 `http://localhost:8501`。面板共六个页面（用 `st.navigation` 注册，侧边栏切换）：
+
+| 页面 | 能看到什么 |
+|------|-----------|
+| **System overview** | 每个组件当前用的 Provider 与模型；集合里的文档数 / 分块数 / 图片数 |
+| **Data Browser** | 摄取进来的文档，展开可看它被切成的每个块、块的元数据与图片 |
+| **Ingestion** | 上传 PDF 触发摄取并看进度条；管理已有文档，可一键删除 |
+| **Ingestion Traces** | 每次摄取运行的每个阶段耗时（瀑布图），定位慢在哪一步 |
+| **Query Traces** | 每个问题怎么被回答的：dense 与 sparse 各自召回了什么、RRF 融合结果、重排改变了什么顺序，并可对单次回答触发 **Ragas Evaluate** |
+| **Evaluation** | 选 golden test set 与评估器，一键跑评估并看 hit_rate / mrr 等指标；也能看到上一次的结果 |
+
+界面示意（文字版，非截图）：
+
+```
+┌─ 侧边栏 ─────────┐  ┌─ System overview ───────────────────────────┐
+│ ▸ Overview       │  │ Components                                  │
+│ ▸ Data Browser   │  │  ┌─────────┐┌─────────┐┌─────────┐          │
+│ ▸ Ingestion      │  │  │ LLM     ││Embedding││VectorSt.│  ...      │
+│ ▸ Ingestion Trace│  │  │ openai  ││openai   ││chroma   │          │
+│ ▸ Query Traces   │  │  └─────────┘└─────────┘└─────────┘          │
+│ ▸ Evaluation     │  │ Data statistics                            │
+└──────────────────┘  │  Documents 12   Chunks 348   Images 7       │
+                       └────────────────────────────────────────────┘
+```
+
+> 💡 追踪数据来自 `logs/traces.jsonl`（JSON Lines），摄取与查询两条链路各写各的记录，Dashboard 直接读这个文件。
+
+---
+
+## 🧪 运行测试
+
+三层测试，命令一样，只是路径和标记不同：
+
+```bash
+# 全部（约 2 分钟）
+uv run pytest -q
+
+# 按层跑
+uv run pytest -q tests/unit          # 单元测试：纯逻辑，不碰网络
+uv run pytest -q tests/integration   # 集成测试：模块之间、真实向量库
+uv run pytest -q tests/e2e            # 端到端：MCP Client、Dashboard、摄取与检索链路
+
+# 按标记跑（e2e 最慢，日常开发可以先跑快的）
+uv run pytest -q -m "not e2e"
+uv run pytest -q -m unit
+
+# 代码风格检查（只跑 check，不做格式化）
+uv run ruff check src tests conftest.py main.py
+```
+
+**不需要 API Key、不需要联网**：端到端测试用本地起的一个小服务顶替 embedding 提供方（`tests/e2e/stub_embedding_server.py`），所以 `uv run pytest -q` 在任何机器上都能跑完。
+
+| 目录 | 测什么 |
+|------|--------|
+| `tests/unit` | 每个模块的边界行为：工厂注册、切分器、编码器、重排器、评估器、配置校验 |
+| `tests/integration` | 模块之间：切分 → 编码 → 入库 → 检索的往返，MCP 协议处理，摄取流水线 |
+| `tests/e2e` | 完整链路：以子进程启动 MCP Server 并像客户端一样调用；用 Streamlit 的 `AppTest` 跑遍六个页面；摄取后检索能否命中 golden test set |
+
+---
+
+## 🐛 运行排错 FAQ
+
+**1. 报 401 / AuthenticationError，提示 API Key 无效？**
+
+配置文件里的 `api_key` 留空是**故意的**，代码会读环境变量。先确认变量真的在当前 shell 里：
+
+```bash
+# macOS / Linux
+export OPENAI_API_KEY="sk-..."
+# Windows PowerShell
+$env:OPENAI_API_KEY="sk-..."
+```
+
+变量名按 Provider 走：`OPENAI_API_KEY`、`AZURE_API_KEY`、`DEEPSEEK_API_KEY`、`DASHSCOPE_API_KEY`、`GEMINI_API_KEY`、`GROQ_API_KEY`、`MISTRAL_API_KEY`、`TOGETHER_API_KEY`。注意改完环境变量要**重启** Server 或 Dashboard 才生效。
+
+**2. `uv pip install -e ".[dev]"` 装不上依赖？**
+
+- 网络慢：换镜像源，例如 `UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple uv pip install -e ".[dev]"`
+- 虚拟环境里没有 pip 是正常的（本项目用 uv 管理），**不要**在 venv 里跑 `pip install`，用 `uv pip install --python .venv/Scripts/python.exe -e ".[dev]"`（Windows 路径是 `.venv/Scripts/python.exe`）。
+- 装完仍然 `ModuleNotFoundError`：确认用的是 venv 里的解释器（`.venv/Scripts/python.exe`），而不是系统 Python。
+
+**3. 连接不上 Provider（Connection refused / timeout）？**
+
+- **Ollama**：确认服务在跑（`ollama serve`），且 `base_url` 写的是 `http://localhost:11434`；模型要先 `ollama pull` 下来。
+- **Azure OpenAI**：`azure_endpoint`、`api_version`、`deployment_name` 三个都要填，且 **deployment 名不等于模型名**。
+- **公司代理**：设置 `HTTPS_PROXY` / `HTTP_PROXY` 环境变量后重试。
+
+**4. 向量库目录被占用 / 报 SQLite 锁？**
+
+Chroma 用的是嵌入式数据库，同一个 `persist_directory` 同一时刻只能有一个进程写。**关掉正在跑的 Dashboard 或 Server 再摄取**，或者给不同集合配置不同的 `persist_directory`。
+
+**5. Dashboard 打不开或端口被占用？**
+
+`uv run streamlit run src/observability/dashboard/app.py --server.port 8502`换一个端口。面板读的是当前工作目录下的 `config/settings.yaml`，所以**请在仓库根目录启动**。
+
+**6. 改了 `chunk_size` 但查询结果没变？**
+
+旧的分块还在库里。重新摄取并强制覆盖：
+
+```bash
+uv run python scripts/ingest.py --path data/documents --collection default --force
+```
+
+**7. MCP 客户端连不上 Server？**
+
+按顺序排查：① `command` 是不是绝对路径、是不是 venv 里的解释器；② 配置文件路径对不对（`--config` 或 `SMART_KNOWLEDGE_HUB_CONFIG`）；③ **stdout 只能有协议消息**——如果你的代码往 stdout 打印了东西，客户端就会解析失败；日志请走 stderr。手动验证一下 Server 能起来：
+
+```bash
+echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}' | uv run python main.py
+```
+
+**8. 摄取很慢？**
+
+第一次摄取要把文档切片、调用 embedding、写向量库和 BM25 索引，慢是正常的。加速可以：调大 `ingestion.batch_size`、关掉 `chunk_refiner.use_llm` 与 `metadata_enricher.use_llm`、先用 `chunk_size` 大一点的配置试跑。
 
 ---
 
