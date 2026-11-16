@@ -171,6 +171,10 @@ class IngestionSettings:
     chunk_overlap: int = 200
     splitter: str = "recursive"
     batch_size: int = 100
+    bm25_index_dir: str = "data/db/bm25"
+    images_root: str = "data/images"
+    image_index_db: str = "data/db/image_index.db"
+    history_db: str = "data/db/ingestion_history.db"
     chunk_refiner: ChunkRefinerSettings = field(default_factory=ChunkRefinerSettings)
     metadata_enricher: MetadataEnricherSettings = field(default_factory=MetadataEnricherSettings)
 
@@ -332,6 +336,10 @@ def _build_settings(raw: dict[str, Any]) -> Settings:
         chunk_overlap=_optional_int(raw, "ingestion", "chunk_overlap", 200),
         splitter=_optional_str(raw, "ingestion", "splitter", "recursive"),
         batch_size=_optional_int(raw, "ingestion", "batch_size", 100),
+        bm25_index_dir=_optional_str(raw, "ingestion", "bm25_index_dir", "data/db/bm25"),
+        images_root=_optional_str(raw, "ingestion", "images_root", "data/images"),
+        image_index_db=_optional_str(raw, "ingestion", "image_index_db", "data/db/image_index.db"),
+        history_db=_optional_str(raw, "ingestion", "history_db", "data/db/ingestion_history.db"),
         chunk_refiner=ChunkRefinerSettings(
             use_llm=bool(_value(raw, "ingestion", "chunk_refiner", {}).get("use_llm", False))
         ),

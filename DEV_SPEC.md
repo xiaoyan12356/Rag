@@ -1993,8 +1993,8 @@ dashboard:
 | C11 | BM25Indexer（倒排索引+IDF计算） | [x] | 2026-11-16 | BM25Indexer(倒排索引 + IDF + JSON 持久化 + 增量更新/重建 + 查询) + 33 个单元测试 |
 | C12 | VectorUpserter（幂等upsert） | [x] | 2026-11-16 | VectorUpserter(确定性 chunk_id + 幂等 upsert + 批量写入) + 21 个单元测试 |
 | C13 | ImageStorage（图片存储+SQLite索引） | [x] | 2026-11-16 | ImageStorage(图片落盘 + SQLite 映射表 + WAL + 幂等覆盖) + 25 个单元测试 |
-| C14 | Pipeline 编排（MVP 串起来） | [ ] | | |
-| C15 | 脚本入口 ingest.py | [ ] | | |
+| C14 | Pipeline 编排（MVP 串起来） | [x] | 2026-11-16 | IngestionPipeline(六步串行 + 失败命名步骤 + 进度回调 + trace) + 21 个集成测试 |
+| C15 | 脚本入口 ingest.py | [x] | 2026-11-16 | scripts/ingest.py(--path/--collection/--force/--dry-run + 分级退出码) + 13 个端到端测试 |
 
 #### 阶段 D：Retrieval MVP
 
@@ -2068,14 +2068,14 @@ dashboard:
 |------|---------|--------|------|
 | 阶段 A | 3 | 3 | 100% |
 | 阶段 B | 16 | 16 | 100% |
-| 阶段 C | 15 | 13 | 87% |
+| 阶段 C | 15 | 15 | 100% |
 | 阶段 D | 7 | 0 | 0% |
 | 阶段 E | 6 | 0 | 0% |
 | 阶段 F | 5 | 0 | 0% |
 | 阶段 G | 6 | 0 | 0% |
 | 阶段 H | 5 | 0 | 0% |
 | 阶段 I | 5 | 0 | 0% |
-| **总计** | **68** | **32** | **47%** |
+| **总计** | **68** | **34** | **50%** |
 
 
 ---
@@ -2838,6 +2838,16 @@ dashboard:
   - Pipeline 日志清晰展示各阶段进度
   - 失败步骤抛出明确异常信息
 - **测试方法**：`pytest -v tests/integration/test_ingestion_pipeline.py`。
+- **实现说明**：
+  - `IngestionPipeline(settings, collection, force, embedding)`：六步串行 integrity → load → split → transform → encode → store，全部组件由 settings 构建，换 provider 或换数据目录只改配置。
+  - embedding provider 可注入，测试因此在无网络的情况下跑完整条链路。
+  - 任一步失败抛 `PipelineError`，异常里带上失败步骤名（`error.stage`），失败原因不再靠猜；失败的文件会在 history 中标记，下次重跑。
+  - 未变更的文档凭 SHA256 命中 history 直接跳过；`force=True` 强制重跑。
+  - 稀疏索引写入前把 chunk_id 换成向量库使用的 id，两边索引口径一致，检索到的 chunk 能回查文本。
+  - 每个步骤的耗时写进 `PipelineResult.stages`，同时通过 `on_progress(stage, step, total)` 回调向命令行汇报进度。
+  - 测试文档在测试运行时用 PyMuPDF 生成（3 页、每页一图），不往仓库里塞二进制 PDF；图片抽取、表格化文本与多页分块都被真正走到。
+  - `core/settings.py` 的 `IngestionSettings` 新增 bm25_index_dir / images_root / image_index_db / history_db 四个路径配置。
+  - 集成测试 21 个（`tests/integration/test_ingestion_pipeline.py`）。
 
 ### C15：脚本入口 ingest.py（离线可用）
 - **目标**：实现 `scripts/ingest.py`，支持 `--collection`、`--path`、`--force`，并调用 pipeline。
@@ -2846,6 +2856,13 @@ dashboard:
   - `tests/e2e/test_data_ingestion.py`
 - **验收标准**：命令行可运行并在 `data/db` 产生产物；重复运行在未变更时跳过。
 - **测试方法**：`pytest -q tests/e2e/test_data_ingestion.py`（尽量用临时目录）。
+- **实现说明**：
+  - `scripts/ingest.py`：命令行入口，支持 `--path`（文件或目录）、`--collection`、`--force`、`--config`、`--verbose`、`--dry-run`。
+  - 目录会被递归搜索 PDF；每次运行输出 SUMMARY（文件数 / 摄取 / 跳过 / 失败 / chunk 数 / 图片数）。
+  - 退出码分级：全部成功 0，部分成功 1，全部失败或无法启动 2，便于脚本化调用判断结果。
+  - 未变更的文档在第二次运行时被跳过（history 记 SHA256），索引内容保持不变；`--force` 可强制重跑。
+  - 端到端测试以子进程方式真的跑这个脚本，配置里用一个本地 stub embedding 服务顶替真实 provider，因此不需要任何密钥或网络；所有产物都落在临时目录。
+  - 端到端测试 13 个（`tests/e2e/test_data_ingestion.py`）。
 
 ---
 
