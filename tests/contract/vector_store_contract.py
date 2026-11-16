@@ -162,3 +162,103 @@ class VectorStoreContract:
         store = self.make_store()
 
         assert store.get_by_ids([]) == []
+
+    def test_delete_by_metadata_removes_the_matching_records(self):
+        store = self.make_store()
+        store.upsert(
+            [
+                make_record("a", [1.0, 0.0], doc_hash="one"),
+                make_record("b", [1.0, 0.0], doc_hash="one"),
+                make_record("c", [1.0, 0.0], doc_hash="two"),
+            ]
+        )
+
+        store.delete_by_metadata({"doc_hash": "one"})
+
+        matches = store.query([1.0, 0.0], top_k=10)
+        assert [match["id"] for match in matches] == ["c"]
+
+    def test_delete_by_metadata_reports_how_many_records_were_deleted(self):
+        store = self.make_store()
+        store.upsert(
+            [
+                make_record("a", [1.0, 0.0], doc_hash="one"),
+                make_record("b", [1.0, 0.0], doc_hash="one"),
+            ]
+        )
+
+        deleted = store.delete_by_metadata({"doc_hash": "one"})
+
+        assert deleted == 2
+
+    def test_delete_by_metadata_of_something_that_is_not_there_deletes_nothing(self):
+        store = self.make_store()
+        store.upsert([make_record("a", [1.0, 0.0], doc_hash="one")])
+
+        deleted = store.delete_by_metadata({"doc_hash": "missing"})
+
+        assert deleted == 0
+        assert len(store.query([1.0, 0.0], top_k=10)) == 1
+
+    def test_delete_by_metadata_needs_every_field_to_match(self):
+        store = self.make_store()
+        store.upsert(
+            [
+                make_record("a", [1.0, 0.0], doc_hash="one", collection="kb"),
+                make_record("b", [1.0, 0.0], doc_hash="one", collection="other"),
+            ]
+        )
+
+        store.delete_by_metadata({"doc_hash": "one", "collection": "kb"})
+
+        matches = store.query([1.0, 0.0], top_k=10)
+        assert [match["id"] for match in matches] == ["b"]
+
+    def test_delete_by_metadata_refuses_empty_filters(self):
+        """Empty filters would delete the whole store, so they are refused."""
+        store = self.make_store()
+        store.upsert([make_record("a", [1.0, 0.0], doc_hash="one")])
+
+        with pytest.raises(ValueError):
+            store.delete_by_metadata({})
+
+    def test_delete_by_metadata_keeps_the_records_that_do_not_match(self):
+        store = self.make_store()
+        store.upsert(
+            [
+                make_record("a", [1.0, 0.0], doc_hash="one"),
+                make_record("b", [1.0, 0.0], doc_hash="two"),
+            ]
+        )
+
+        store.delete_by_metadata({"doc_hash": "one"})
+
+        records = store.get_by_ids(["a", "b"])
+        assert [record["id"] for record in records] == ["b"]
+
+    def test_list_collections_names_the_collection_of_the_store(self):
+        store = self.make_store()
+
+        names = [entry["name"] for entry in store.list_collections()]
+
+        assert store.collection_name in names
+
+    def test_list_collections_counts_the_records_of_the_store(self):
+        store = self.make_store()
+        store.upsert(
+            [
+                make_record("a", [1.0, 0.0]),
+                make_record("b", [1.0, 0.0]),
+            ]
+        )
+
+        listed = {entry["name"]: entry["chunk_count"] for entry in store.list_collections()}
+
+        assert listed[store.collection_name] == 2
+
+    def test_list_collections_of_an_empty_store_counts_nothing(self):
+        store = self.make_store()
+
+        listed = {entry["name"]: entry["chunk_count"] for entry in store.list_collections()}
+
+        assert listed[store.collection_name] == 0

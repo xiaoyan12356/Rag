@@ -40,6 +40,20 @@ class FakeVectorStore(BaseVectorStore):
     def get_by_ids(self, ids, trace=None):
         return [self.records[i] for i in ids if i in self.records]
 
+    def delete_by_metadata(self, filters):
+        self.validate_delete_filters(filters)
+        keep = {
+            key: record
+            for key, record in self.records.items()
+            if not all(record.get("metadata", {}).get(k) == v for k, v in filters.items())
+        }
+        removed = len(self.records) - len(keep)
+        self.records = keep
+        return removed
+
+    def list_collections(self):
+        return [{"name": self.collection_name, "chunk_count": len(self.records)}]
+
 
 def make_chunk(
     text: str = "Some chunk text.",
@@ -237,6 +251,21 @@ class TestCollection:
         upserter = VectorUpserter(settings, collection_name="other", vector_store=FakeVectorStore())
 
         assert upserter.collection_name == "other"
+
+    def test_the_collection_travels_with_the_chunk(self):
+        """The metadata has to say which collection the chunk belongs to.
+
+        The dashboard finds the documents of a collection by asking the chunks
+        of every document, so a chunk without the collection in its metadata
+        cannot be found.
+        """
+        store = FakeVectorStore()
+        upserter = make_upserter(store, collection_name="other")
+
+        upserter.upsert([make_chunk("hello")], [[0.1, 0.2]])
+
+        record = next(iter(store.records.values()))
+        assert record["metadata"]["collection"] == "other"
 
 
 class TestTrace:

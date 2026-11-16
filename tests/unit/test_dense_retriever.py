@@ -58,6 +58,20 @@ class FakeVectorStore(BaseVectorStore):
     def get_by_ids(self, ids, trace=None):
         return [record for record in self.records if record["id"] in set(ids)]
 
+    def delete_by_metadata(self, filters):
+        self.validate_delete_filters(filters)
+        keep = [
+            record
+            for record in self.records
+            if not all(record.get("metadata", {}).get(k) == v for k, v in filters.items())
+        ]
+        removed = len(self.records) - len(keep)
+        self.records = keep
+        return removed
+
+    def list_collections(self):
+        return [{"name": self.collection_name, "chunk_count": len(self.records)}]
+
 
 def make_settings(dense_top_k: int | None = 20) -> Settings:
     return Settings(

@@ -26,6 +26,7 @@ class BaseVectorStore(ABC):
 
     def __init__(self, config: VectorStoreSettings) -> None:
         self.config = config
+        self.collection_name = config.collection_name or "knowledge_hub"
 
     @abstractmethod
     def upsert(
@@ -68,6 +69,28 @@ class BaseVectorStore(ABC):
         requested records were found.
         """
 
+    @abstractmethod
+    def delete_by_metadata(
+        self,
+        filters: Mapping[str, Any],
+    ) -> int:
+        """Delete every record whose metadata matches `filters`.
+
+        A record is deleted when every field of `filters` equals the field of
+        the same name in the metadata of the record. The number of records
+        that were deleted is returned; filters that match nothing delete
+        nothing and report zero.
+        """
+
+    @abstractmethod
+    def list_collections(self) -> list[dict[str, Any]]:
+        """Return the collections the store holds and how much is in them.
+
+        Every entry carries a `name` and a `chunk_count`. The collection the
+        store was opened with is always among them, so a caller can ask what
+        can be searched without knowing the name of the store.
+        """
+
     def validate_records(self, records: Sequence[Mapping[str, Any]]) -> None:
         """Raise `ValueError` unless every record carries the required fields."""
         if not records:
@@ -105,3 +128,12 @@ class BaseVectorStore(ABC):
             raise ValueError("query vector cannot be empty")
         if not isinstance(top_k, int) or isinstance(top_k, bool) or top_k <= 0:
             raise ValueError(f"top_k must be a positive integer, got {top_k!r}")
+
+    def validate_delete_filters(self, filters: Mapping[str, Any]) -> None:
+        """Raise `ValueError` unless `filters` names the records to delete.
+
+        Filters that match everything would empty the whole store, so an
+        empty filter is refused.
+        """
+        if not filters:
+            raise ValueError("filters cannot be empty")

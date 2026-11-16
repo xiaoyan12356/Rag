@@ -44,6 +44,20 @@ class FakeVectorStore(BaseVectorStore):
         self.calls.append(list(ids))
         return [record for record in self.records if record["id"] in wanted]
 
+    def delete_by_metadata(self, filters):
+        self.validate_delete_filters(filters)
+        keep = [
+            record
+            for record in self.records
+            if not all(record.get("metadata", {}).get(k) == v for k, v in filters.items())
+        ]
+        removed = len(self.records) - len(keep)
+        self.records = keep
+        return removed
+
+    def list_collections(self):
+        return [{"name": self.collection_name, "chunk_count": len(self.records)}]
+
 
 class FakeIndexer(BM25Indexer):
     """Indexer that answers with the matches it was given."""

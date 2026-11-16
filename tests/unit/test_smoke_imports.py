@@ -39,7 +39,17 @@ def test_sub_package_imports(package_name):
     assert module.__name__ == package_name
 
 
-def test_main_entry_point_runs():
+def test_main_entry_point_runs(monkeypatch):
+    """The entry point hands over to the server."""
     import main
 
+    handed_over = {}
+
+    def fake_serve(arguments):
+        handed_over["arguments"] = arguments
+        return 0
+
+    monkeypatch.setattr(main, "serve", fake_serve)
+
     assert main.main() == 0
+    assert handed_over["arguments"] == []

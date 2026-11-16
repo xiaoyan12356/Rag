@@ -56,6 +56,20 @@ class FakeVectorStore(BaseVectorStore):
             if record["id"] in wanted
         ]
 
+    def delete_by_metadata(self, filters):
+        self.validate_delete_filters(filters)
+        keep = {
+            key: record
+            for key, record in self.records.items()
+            if not all(record.get("metadata", {}).get(k) == v for k, v in filters.items())
+        }
+        removed = len(self.records) - len(keep)
+        self.records = keep
+        return removed
+
+    def list_collections(self):
+        return [{"name": self.collection_name, "chunk_count": len(self.records)}]
+
 
 class TestFakeVectorStoreContract(VectorStoreContract):
     """Runs the contract suite against the in-memory fake."""
@@ -106,6 +120,12 @@ class TestBaseVectorStore:
 
         with pytest.raises(ValueError, match="top_k"):
             store.validate_query_vector([1.0, 0.0], -1)
+
+    def test_validate_delete_filters_rejects_empty_filters(self):
+        store = FakeVectorStore(VectorStoreSettings())
+
+        with pytest.raises(ValueError, match="filters cannot be empty"):
+            store.validate_delete_filters({})
 
 
 def make_settings(provider: str = "fake") -> Settings:
@@ -204,3 +224,36 @@ class TestVectorStoreFactory:
     def test_registering_an_empty_provider_name_is_rejected(self):
         with pytest.raises(ValueError):
             VectorStoreFactory.register("", lambda settings: FakeVectorStore(settings.vector_store))
+
+    def test_registering_a_provider_normalises_the_name(self, register_provider):
+        register_provider("  Fake  ", lambda settings: FakeVectorStore(settings.vector_store))
+
+        assert "fake" in VectorStoreFactory.registered_providers()
+
+    def test_unregistering_a_provider_normalises_the_name(self, register_provider):
+        register_provider("fake", lambda settings: FakeVectorStore(settings.vector_store))
+
+        VectorStoreFactory.unregister("  FAKE  ")
+
+        assert "fake" not in VectorStoreFactory.registered_providers()
+
+    def test_unregistering_an_unknown_provider_is_ignored(self):
+        VectorStoreFactory.unregister("never-registered")
+
+        assert "never-registered" not in VectorStoreFactory.registered_providers()
+
+    def test_a_provider_name_with_spaces_is_accepted(self, register_provider):
+        register_provider("fake", lambda settings: FakeVectorStore(settings.vector_store))
+
+        store = VectorStoreFactory.create(make_settings("  fake  "))
+
+        assert isinstance(store, FakeVectorStore)
+
+    def test_a_builder_that_fails_is_not_hidden(self, register_provider):
+        def broken(settings):
+            raise RuntimeError("the database is not there")
+
+        register_provider("fake", broken)
+
+        with pytest.raises(RuntimeError, match="the database is not there"):
+            VectorStoreFactory.create(make_settings("fake"))

@@ -94,6 +94,7 @@ class VectorUpserter:
                         **chunk.metadata,
                         "text": chunk.text,
                         "chunk_id": chunk_id,
+                        "collection": self.collection_name,
                     },
                 }
             )

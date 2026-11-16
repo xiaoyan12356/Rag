@@ -7,6 +7,7 @@ score that grows with closeness.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
@@ -19,6 +20,8 @@ from libs.vector_store.base_vector_store import BaseVectorStore, VectorStoreErro
 if TYPE_CHECKING:
     from core.trace.trace_context import TraceContext
 
+logger = logging.getLogger(__name__)
+
 
 class ChromaStore(BaseVectorStore):
     """ChromaDB implementation of the vector store contract."""
@@ -26,7 +29,6 @@ class ChromaStore(BaseVectorStore):
     def __init__(self, config: VectorStoreSettings) -> None:
         super().__init__(config)
 
-        self.collection_name = config.collection_name or "knowledge_hub"
         self.persist_directory = resolve_path(
             config.persist_directory or "./data/db/chroma"
         )
@@ -164,6 +166,68 @@ class ChromaStore(BaseVectorStore):
                 }
             )
         return records
+
+    def delete_by_metadata(self, filters: Mapping[str, Any]) -> int:
+        """Delete every record whose metadata matches `filters`.
+
+        Args:
+            filters: The metadata fields the records have to match.
+
+        Returns:
+            The number of records that were deleted.
+        """
+        self.validate_delete_filters(filters)
+
+        try:
+            existing = self.collection.get(
+                where=_build_where_clause(filters), include=[]
+            )
+            ids = [str(record_id) for record_id in (existing.get("ids") or [])]
+            if not ids:
+                return 0
+            self.collection.delete(ids=ids)
+        except Exception as exc:
+            raise VectorStoreError(
+                f"Failed to delete the records matching {dict(filters)} from the "
+                f"Chroma collection '{self.collection_name}': "
+                f"{type(exc).__name__}: {exc}"
+            ) from exc
+        return len(ids)
+
+    def list_collections(self) -> list[dict[str, Any]]:
+        """Return the collections the store holds and how much is in them.
+
+        Args:
+            None.
+
+        Returns:
+            One entry per collection, with its name and how many chunks it
+            holds.
+        """
+        names = {self.collection_name}
+        try:
+            for collection in self.client.list_collections():
+                name = getattr(collection, "name", None)
+                if name:
+                    names.add(str(name))
+        except Exception as exc:
+            raise VectorStoreError(
+                f"Failed to list the collections of the Chroma store at "
+                f"{self.persist_directory}: {type(exc).__name__}: {exc}"
+            ) from exc
+
+        listed: list[dict[str, Any]] = []
+        for name in sorted(names):
+            listed.append({"name": name, "chunk_count": self._count(name)})
+        return listed
+
+    def _count(self, name: str) -> int:
+        """Return how many records the collection with this name holds."""
+        try:
+            return int(self.client.get_collection(name).count())
+        except Exception as exc:
+            logger.warning("Could not count the chunks of '%s': %s", name, exc)
+            return 0
 
 
 def _first(values: Any) -> list[Any]:
