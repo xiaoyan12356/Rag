@@ -1980,7 +1980,7 @@ dashboard:
 
 | 任务编号 | 任务名称 | 状态 | 完成日期 | 备注 |
 |---------|---------|------|---------|------|
-| C1 | 定义核心数据类型/契约（Document/Chunk/ChunkRecord） | [ ] | | |
+| C1 | 定义核心数据类型/契约（Document/Chunk/ChunkRecord） | [x] | 2026-11-16 | core/types.py 的 Document/Chunk/ChunkRecord + 图片占位符与 ImageRef 校验 + 38 个单元测试 |
 | C2 | 文件完整性检查（SHA256） | [ ] | | |
 | C3 | Loader 抽象基类与 PDF Loader | [ ] | | |
 | C4 | Splitter 集成（调用 Libs） | [ ] | | |
@@ -2068,14 +2068,14 @@ dashboard:
 |------|---------|--------|------|
 | 阶段 A | 3 | 3 | 100% |
 | 阶段 B | 16 | 14 | 88% |
-| 阶段 C | 15 | 0 | 0% |
+| 阶段 C | 15 | 1 | 7% |
 | 阶段 D | 7 | 0 | 0% |
 | 阶段 E | 6 | 0 | 0% |
 | 阶段 F | 5 | 0 | 0% |
 | 阶段 G | 6 | 0 | 0% |
 | 阶段 H | 5 | 0 | 0% |
 | 阶段 I | 5 | 0 | 0% |
-| **总计** | **68** | **17** | **25%** |
+| **总计** | **68** | **18** | **26%** |
 
 
 ---
@@ -2440,6 +2440,15 @@ dashboard:
     - 说明：通过 `text_offset` 和 `text_length` 可精确定位图片在文本中的位置，支持同一图片多次出现的场景
   - **文本中图片占位符规范**：在 `Document.text` 中，图片位置使用 `[IMAGE: {image_id}]` 格式标记。
 - **测试方法**：`pytest -q tests/unit/test_core_types.py`。
+- **实现说明**：
+  - 三个类型都放在 `core/types.py`，摄取、检索、MCP tools 传的是同一批记录，契约集中一处，避免各模块各写一份结构。
+  - 三个类型都实现 `to_dict()`/`from_dict()`，字段顺序固定，JSON 可序列化——这是 chunk 能从 splitter 流到 vector store 再流回来的前提。
+  - `metadata` 必须含 `source_path`，构造时就报错：没有来源的记录无法溯源，问题要在产生它的地方暴露，而不是等到最终使用。
+  - `metadata` 其余字段可自由扩展，序列化往返后仍保留，兼容后续阶段增量加字段。
+  - 图片引用（`metadata["images"]`）在构造时校验：`id`/`path` 非空、`page` 为整数、`text_offset`/`text_length` 非负整数、`position` 为映射；缺失或类型不对在记录产生处报错。
+  - 占位符格式统一走 `image_placeholder(image_id)`，它返回的字符串长度就是 `text_length` 要记的值，生产方与消费方用同一个 helper 不会对不上。
+  - `ChunkRecord.from_chunk()` 复制 metadata 而不是共享同一个 dict，后续改记录不会回写到 chunk。
+  - `core/__init__.py` 没有做统一 re-export：导入路径保持 `from core.types import ...`，避免 `core` 包初始化时就把类型拉进来，减少循环导入风险。
 
 ### C2：文件完整性检查（SHA256）
 - **目标**：在Libs中实现 `file_integrity.py`：计算文件 hash，并提供“是否跳过”的判定接口（使用 SQLite 作为默认存储，支持后续替换为 Redis/PostgreSQL）。
