@@ -26,6 +26,28 @@ STATUS_FAILED = "failed"
 STATUS_PROCESSING = "processing"
 
 
+def compute_file_sha256(file_path: str | Path) -> str:
+    """Return the SHA256 hash of the file.
+
+    The file is read in pieces, so hashing a large document does not need
+    the whole document in memory.
+    """
+    path = Path(file_path)
+    if not path.exists():
+        raise FileNotFoundError(f"File not found: {file_path}")
+    if not path.is_file():
+        raise OSError(f"Path is not a file: {file_path}")
+
+    digest = hashlib.sha256()
+    try:
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(READ_CHUNK_SIZE), b""):
+                digest.update(chunk)
+    except OSError as exc:
+        raise OSError(f"Failed to read file {file_path}: {exc}") from exc
+    return digest.hexdigest()
+
+
 class FileIntegrityChecker(ABC):
     """Remember which files were already ingested.
 
@@ -34,25 +56,8 @@ class FileIntegrityChecker(ABC):
     """
 
     def compute_sha256(self, file_path: str | Path) -> str:
-        """Return the SHA256 hash of the file.
-
-        The file is read in pieces, so hashing a large document does not need
-        the whole document in memory.
-        """
-        path = Path(file_path)
-        if not path.exists():
-            raise FileNotFoundError(f"File not found: {file_path}")
-        if not path.is_file():
-            raise OSError(f"Path is not a file: {file_path}")
-
-        digest = hashlib.sha256()
-        try:
-            with path.open("rb") as handle:
-                for chunk in iter(lambda: handle.read(READ_CHUNK_SIZE), b""):
-                    digest.update(chunk)
-        except OSError as exc:
-            raise OSError(f"Failed to read file {file_path}: {exc}") from exc
-        return digest.hexdigest()
+        """Return the SHA256 hash of the file."""
+        return compute_file_sha256(file_path)
 
     @abstractmethod
     def should_skip(self, file_hash: str) -> bool:

@@ -72,7 +72,7 @@
 |---------|---------|------|---------|------|
 | C1 | 定义核心数据类型/契约（Document/Chunk/ChunkRecord） | [x] | 2026-11-16 | core/types.py 的 Document/Chunk/ChunkRecord + 图片占位符与 ImageRef 校验 + 38 个单元测试 |
 | C2 | 文件完整性检查（SHA256） | [x] | 2026-11-16 | FileIntegrityChecker 抽象接口 + SQLiteIntegrityChecker(WAL) + 增量跳过判定 + 36 个单元测试 |
-| C3 | Loader 抽象基类与 PDF Loader | [ ] | | |
+| C3 | Loader 抽象基类与 PDF Loader | [x] | 2026-11-16 | BaseLoader/LoaderError + PdfLoader(MarkItDown 文本 + PyMuPDF 图片提取与占位符) + with_images.pdf 样例 + 40 个单元测试 |
 | C4 | Splitter 集成（调用 Libs） | [ ] | | |
 | C5 | Transform 基类 + ChunkRefiner | [ ] | | |
 | C6 | MetadataEnricher | [ ] | | |
@@ -158,14 +158,14 @@
 |------|---------|--------|------|
 | 阶段 A | 3 | 3 | 100% |
 | 阶段 B | 16 | 14 | 88% |
-| 阶段 C | 15 | 2 | 13% |
+| 阶段 C | 15 | 3 | 20% |
 | 阶段 D | 7 | 0 | 0% |
 | 阶段 E | 6 | 0 | 0% |
 | 阶段 F | 5 | 0 | 0% |
 | 阶段 G | 6 | 0 | 0% |
 | 阶段 H | 5 | 0 | 0% |
 | 阶段 I | 5 | 0 | 0% |
-| **总计** | **68** | **19** | **28%** |
+| **总计** | **68** | **20** | **29%** |
 
 
 ---
@@ -586,6 +586,15 @@
     - 若 PDF 无图片，`metadata.images` 可为空列表或省略该字段
   - **降级行为**：图片提取失败不应阻塞文本解析，可在日志中记录警告。
 - **测试方法**：`pytest -q tests/unit/test_loader_pdf_contract.py`。
+- **实现说明**：
+  - 文本走 MarkItDown（PDF 版面拍平成 Markdown），图片走 PyMuPDF，两边的结果再合并：每张图在文本里留下 `[IMAGE: {image_id}]` 占位符。
+  - 占位符插在**图片后面的文字之前**，这样描述图片的那段话和占位符落在同一个 chunk 里；找不到对应文字时退到页面末尾。
+  - 图片 id 格式 `{doc_hash前8位}_{页码}_{页内序号}`，全局唯一且能反查来源；图片文件存在 `data/images/{doc_hash}/` 下。
+  - 图片路径在 metadata 里存**相对仓库根目录**的路径（`data/images/...`），换机器部署不会带上本机绝对路径。
+  - 图片提取是**尽力而为**：PyMuPDF 缺失、单张图读失败、整个提取过程抛异常，都只记 warning 日志并继续，仍然产出带完整文本的 Document——文本不能因为图片读不出来就丢了。
+  - `text_offset`/`text_length` 在页面拼接后统一换算，保证 `document.text[offset:offset+length]` 正好等于占位符，C4 按 chunk 分发图片引用时能精确定位。
+  - `compute_file_sha256` 提到模块级函数：PDF loader 需要文档 hash（图片目录名）但不需要一个 checker 实例。
+  - 非 PDF 后缀的文件报 `ValueError`，扩展名是 .pdf 但内容不是 PDF 的报 `LoaderError`，两类错误分开。
 - **测试建议**：
   - 准备两个测试文件：`simple.pdf`（纯文本）和 `with_images.pdf`（包含图片）
   - 验证纯文本PDF能正常解析
